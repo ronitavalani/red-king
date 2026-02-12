@@ -20,11 +20,29 @@
   letter-spacing: 0.15em;
 }
 
+.game-room-header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
 .game-room-code {
   color: var(--text-secondary);
   font-family: monospace;
   font-size: 0.9rem;
   letter-spacing: 0.1em;
+}
+
+.btn-rules {
+  background: transparent;
+  color: var(--accent-gold);
+  border: 1px solid var(--accent-gold);
+  padding: 0.4rem 1rem;
+  font-size: 0.85rem;
+}
+
+.btn-rules:hover {
+  background: rgba(212, 168, 75, 0.1);
 }
 
 .game-room-content {
@@ -38,15 +56,51 @@
   flex-direction: column;
   justify-content: space-between;
   align-items: center;
-  padding: 2rem;
-  gap: 2rem;
+  padding: 1rem 2rem 2rem;
+  gap: 1rem;
 }
 
+/* Instruction banner */
+.instruction-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 600px;
+  justify-content: center;
+}
+
+.instruction-banner.your-turn {
+  border-color: var(--accent-gold);
+  background: rgba(212, 168, 75, 0.08);
+}
+
+.turn-indicator {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #1a0a0a;
+  background: var(--accent-gold);
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+}
+
+.instruction-text {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+/* Table center */
 .table-center {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 1.5rem;
+  flex: 1;
 }
 
 .opponents-area {
@@ -61,16 +115,42 @@
   flex-direction: column;
   align-items: center;
   gap: 0.4rem;
+  padding: 0.5rem;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  transition: border-color 0.3s;
+}
+
+.opponent-hand.active-turn {
+  border-color: var(--accent-gold);
+  background: rgba(212, 168, 75, 0.05);
 }
 
 .opponent-name {
   color: var(--text-secondary);
   font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.turn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-gold);
+  display: inline-block;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1); }
 }
 
 .opponent-cards {
   display: flex;
-  gap: 8px; /* ensure cards are spaced and don't overlap */
+  gap: 8px;
 }
 
 .peek-done-badge {
@@ -81,6 +161,122 @@
   border-radius: 10px;
 }
 
+/* Table piles */
+.table-piles {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+/* Drawn card area */
+.drawn-card-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(212, 168, 75, 0.08);
+  border: 1px solid var(--accent-gold);
+  border-radius: 10px;
+}
+
+.drawn-card-label {
+  color: var(--accent-gold);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.drawn-card-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.drawn-card-hint {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+/* Rule execution area */
+.rule-execution-area {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: rgba(212, 168, 75, 0.08);
+  border: 1px solid var(--accent-gold);
+  border-radius: 8px;
+}
+
+.rule-label {
+  color: var(--accent-gold);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* Black King result */
+.black-king-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(212, 168, 75, 0.08);
+  border: 1px solid var(--accent-gold);
+  border-radius: 10px;
+}
+
+.bk-peeked-cards {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.bk-peeked-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.bk-peeked-owner {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.bk-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Peek result overlay */
+.peek-result-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 900;
+}
+
+.peek-result-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem 2rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-gold);
+  border-radius: 12px;
+}
+
+.peek-result-label {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+/* My hand area */
 .my-hand-area {
   display: flex;
   flex-direction: column;
@@ -94,6 +290,7 @@
   font-weight: 600;
 }
 
+/* Sidebar */
 .game-sidebar {
   width: 260px;
   padding: 1.5rem;
@@ -104,7 +301,7 @@
 }
 
 .game-sidebar .player-list {
-  flex: 1;
+  flex: 0;
 }
 
 .game-sidebar .btn-danger {
@@ -127,11 +324,42 @@
   padding: 0.5rem 0;
 }
 
-.phase-label {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  font-style: italic;
-  text-align: center;
-  padding: 0.5rem 0;
+/* Action log */
+.action-log {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   margin-bottom: 1rem;
+  min-height: 0;
+}
+
+.action-log-title {
+  color: var(--accent-gold);
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  font-family: var(--font-display);
+}
+
+.action-log-entries {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 200px;
+}
+
+.action-log-entry {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  padding: 0.3rem 0.5rem;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  line-height: 1.35;
+}
+
+/* Small button variant */
+.btn-sm {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.82rem;
 }

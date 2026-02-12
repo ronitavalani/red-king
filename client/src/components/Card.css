@@ -2,7 +2,7 @@
   border-radius: 8px;
   position: relative;
   font-family: 'Georgia', serif;
-  transition: transform 0.3s;
+  transition: transform 0.3s, box-shadow 0.3s;
   flex-shrink: 0;
 }
 
@@ -33,6 +33,33 @@
       #6b0f0f 10px
     );
   border: 2px solid #d4a84b;
+}
+
+.card.selectable {
+  cursor: pointer;
+}
+
+.card.selectable:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(212, 168, 75, 0.4);
+}
+
+.card.selected {
+  box-shadow: 0 0 0 3px var(--accent-gold), 0 0 16px rgba(212, 168, 75, 0.5);
+  transform: translateY(-4px);
+}
+
+.card.glowing {
+  animation: card-glow 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes card-glow {
+  from {
+    box-shadow: 0 0 4px rgba(212, 168, 75, 0.3);
+  }
+  to {
+    box-shadow: 0 0 12px rgba(212, 168, 75, 0.7), 0 0 24px rgba(212, 168, 75, 0.3);
+  }
 }
 
 .card-rank-top {

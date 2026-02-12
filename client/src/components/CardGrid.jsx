@@ -1,18 +1,38 @@
 import Card from './Card';
 import './CardGrid.css';
 
-export default function CardGrid({ cards, isPeeking }) {
+export default function CardGrid({ cards, isPeeking, onCardClick, selectableIndices, selectedIndex, size }) {
   if (!cards || cards.length < 4) return null;
+
+  const cardSize = size || 'normal';
 
   return (
     <div className="card-grid">
       <div className="card-grid-row">
-        <Card card={cards[0]} faceUp={false} />
-        <Card card={cards[1]} faceUp={false} />
+        {[0, 1].map((i) => (
+          <Card
+            key={i}
+            card={cards[i]}
+            faceUp={false}
+            size={cardSize}
+            onClick={onCardClick ? () => onCardClick(i) : undefined}
+            selectable={selectableIndices ? selectableIndices.includes(i) : false}
+            selected={selectedIndex === i}
+          />
+        ))}
       </div>
       <div className="card-grid-row">
-        <Card card={cards[2]} faceUp={isPeeking} />
-        <Card card={cards[3]} faceUp={isPeeking} />
+        {[2, 3].map((i) => (
+          <Card
+            key={i}
+            card={cards[i]}
+            faceUp={isPeeking}
+            size={cardSize}
+            onClick={onCardClick ? () => onCardClick(i) : undefined}
+            selectable={selectableIndices ? selectableIndices.includes(i) : false}
+            selected={selectedIndex === i}
+          />
+        ))}
       </div>
     </div>
   );

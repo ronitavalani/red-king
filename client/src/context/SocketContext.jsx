@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { socket } from '../socket';
 
 const SocketContext = createContext(null);
@@ -15,6 +15,21 @@ export function SocketProvider({ children }) {
   const [deckCount, setDeckCount] = useState(0);
   const [opponents, setOpponents] = useState([]);
   const [peekDonePlayers, setPeekDonePlayers] = useState(new Set());
+
+  // Gameplay state
+  const [currentTurn, setCurrentTurn] = useState(null);
+  const [drawnCard, setDrawnCard] = useState(null);
+  const [drawnCardHasRule, setDrawnCardHasRule] = useState(false);
+  const [drawnCardRuleType, setDrawnCardRuleType] = useState(null);
+  const [topDiscard, setTopDiscard] = useState(null);
+  const [actionLog, setActionLog] = useState([]);
+  const [activeRule, setActiveRule] = useState(null); // rule currently being executed
+  const [peekResult, setPeekResult] = useState(null); // result of a peek action
+  const [blackKingPeekResult, setBlackKingPeekResult] = useState(null);
+
+  const addLog = useCallback((entry) => {
+    setActionLog((prev) => [...prev.slice(-19), entry]);
+  }, []);
 
   useEffect(() => {
     function onConnect() {
@@ -79,6 +94,15 @@ export function SocketProvider({ children }) {
       setDeckCount(0);
       setOpponents([]);
       setPeekDonePlayers(new Set());
+      setCurrentTurn(null);
+      setDrawnCard(null);
+      setDrawnCardHasRule(false);
+      setDrawnCardRuleType(null);
+      setTopDiscard(null);
+      setActionLog([]);
+      setActiveRule(null);
+      setPeekResult(null);
+      setBlackKingPeekResult(null);
     }
 
     function onYouLeft() {
@@ -99,6 +123,64 @@ export function SocketProvider({ children }) {
 
     function onPhaseChanged(data) {
       setGamePhase(data.phase);
+      if (data.currentTurn) setCurrentTurn(data.currentTurn);
+      if (data.topDiscard !== undefined) setTopDiscard(data.topDiscard);
+    }
+
+    function onCardDrawn(data) {
+      setDrawnCard(data.card);
+      setDrawnCardHasRule(data.hasRule);
+      setDrawnCardRuleType(data.ruleType);
+    }
+
+    function onOpponentDrew(data) {
+      setDeckCount(data.deckCount);
+      addLog({
+        message: `${data.playerName} drew a card from the deck`,
+        playerId: data.playerId,
+      });
+    }
+
+    function onHandUpdated(data) {
+      setMyCards(data.myCards);
+    }
+
+    function onCardDiscarded(data) {
+      setTopDiscard(data.card);
+      addLog({
+        message: `${data.playerName} ${data.action}`,
+        playerId: data.playerId,
+        card: data.card,
+      });
+    }
+
+    function onTurnUpdate(data) {
+      setCurrentTurn(data.currentTurn);
+      setDeckCount(data.deckCount);
+      setTopDiscard(data.topDiscard);
+      // Clear drawn card state when turn changes
+      setDrawnCard(null);
+      setDrawnCardHasRule(false);
+      setDrawnCardRuleType(null);
+      setActiveRule(null);
+      setPeekResult(null);
+      setBlackKingPeekResult(null);
+    }
+
+    function onExecuteRule(data) {
+      setActiveRule(data.ruleType);
+    }
+
+    function onPeekResult(data) {
+      setPeekResult(data);
+    }
+
+    function onBlackKingPeekResult(data) {
+      setBlackKingPeekResult(data);
+    }
+
+    function onActionLog(data) {
+      addLog({ message: data.message, playerId: data.playerId });
     }
 
     socket.on('connect', onConnect);
@@ -114,6 +196,15 @@ export function SocketProvider({ children }) {
     socket.on('cards-dealt', onCardsDealt);
     socket.on('player-peek-done', onPlayerPeekDone);
     socket.on('phase-changed', onPhaseChanged);
+    socket.on('card-drawn', onCardDrawn);
+    socket.on('opponent-drew', onOpponentDrew);
+    socket.on('hand-updated', onHandUpdated);
+    socket.on('card-discarded', onCardDiscarded);
+    socket.on('turn-update', onTurnUpdate);
+    socket.on('execute-rule', onExecuteRule);
+    socket.on('peek-result', onPeekResult);
+    socket.on('black-king-peek-result', onBlackKingPeekResult);
+    socket.on('action-log', onActionLog);
 
     return () => {
       socket.off('connect', onConnect);
@@ -129,8 +220,17 @@ export function SocketProvider({ children }) {
       socket.off('cards-dealt', onCardsDealt);
       socket.off('player-peek-done', onPlayerPeekDone);
       socket.off('phase-changed', onPhaseChanged);
+      socket.off('card-drawn', onCardDrawn);
+      socket.off('opponent-drew', onOpponentDrew);
+      socket.off('hand-updated', onHandUpdated);
+      socket.off('card-discarded', onCardDiscarded);
+      socket.off('turn-update', onTurnUpdate);
+      socket.off('execute-rule', onExecuteRule);
+      socket.off('peek-result', onPeekResult);
+      socket.off('black-king-peek-result', onBlackKingPeekResult);
+      socket.off('action-log', onActionLog);
     };
-  }, []);
+  }, [addLog]);
 
   function resetState() {
     setRoomCode(null);
@@ -143,6 +243,15 @@ export function SocketProvider({ children }) {
     setDeckCount(0);
     setOpponents([]);
     setPeekDonePlayers(new Set());
+    setCurrentTurn(null);
+    setDrawnCard(null);
+    setDrawnCardHasRule(false);
+    setDrawnCardRuleType(null);
+    setTopDiscard(null);
+    setActionLog([]);
+    setActiveRule(null);
+    setPeekResult(null);
+    setBlackKingPeekResult(null);
   }
 
   const value = {
@@ -160,6 +269,18 @@ export function SocketProvider({ children }) {
     deckCount,
     opponents,
     peekDonePlayers,
+    currentTurn,
+    drawnCard,
+    drawnCardHasRule,
+    drawnCardRuleType,
+    topDiscard,
+    actionLog,
+    activeRule,
+    setActiveRule,
+    peekResult,
+    setPeekResult,
+    blackKingPeekResult,
+    setBlackKingPeekResult,
   };
 
   return (

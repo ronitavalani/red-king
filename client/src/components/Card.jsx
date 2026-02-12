@@ -16,9 +16,18 @@ const SUIT_COLORS = {
   joker: '#d4a84b',
 };
 
-export default function Card({ card, faceUp, size = 'normal' }) {
+export default function Card({ card, faceUp, size = 'normal', onClick, selectable, selected, glowing }) {
+  const classes = [
+    'card',
+    faceUp && card ? 'face-up' : 'face-down',
+    size,
+    selectable ? 'selectable' : '',
+    selected ? 'selected' : '',
+    glowing ? 'glowing' : '',
+  ].filter(Boolean).join(' ');
+
   if (!faceUp || !card) {
-    return <div className={`card face-down ${size}`} />;
+    return <div className={classes} onClick={onClick} />;
   }
 
   const color = SUIT_COLORS[card.suit];
@@ -26,7 +35,7 @@ export default function Card({ card, faceUp, size = 'normal' }) {
   const isJoker = card.suit === 'joker';
 
   return (
-    <div className={`card face-up ${size}`} style={{ '--card-color': color }}>
+    <div className={classes} style={{ '--card-color': color }} onClick={onClick}>
       {isJoker ? (
         <>
           <span className="card-rank-top">
