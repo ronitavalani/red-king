@@ -1,0 +1,64 @@
+.player-list {
+  margin-bottom: 1.5rem;
+}
+
+.player-list-title {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: normal;
+  margin-bottom: 0.75rem;
+}
+
+.player-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.player-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 0.75rem;
+  border-left: 3px solid var(--accent-red);
+  background: var(--bg-secondary);
+  margin-bottom: 0.4rem;
+  border-radius: 0 6px 6px 0;
+}
+
+.player-item.is-host {
+  border-left-color: var(--accent-gold);
+}
+
+.player-item.is-you {
+  background: rgba(212, 168, 75, 0.08);
+}
+
+.player-name {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.player-badges {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.host-badge {
+  background: rgba(212, 168, 75, 0.2);
+  color: var(--accent-gold);
+}
+
+.you-badge {
+  background: rgba(192, 57, 43, 0.2);
+  color: var(--accent-red-light);
+}

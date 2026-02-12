@@ -1,0 +1,45 @@
+.room-code-container {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.room-code-label {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.room-code-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-gold);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+}
+
+.room-code-text {
+  font-family: monospace;
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--accent-gold);
+  letter-spacing: 0.3em;
+}
+
+.copy-btn {
+  background: transparent;
+  border: 1px solid var(--text-secondary);
+  color: var(--text-secondary);
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.copy-btn:hover {
+  border-color: var(--accent-gold);
+  color: var(--accent-gold);
+}

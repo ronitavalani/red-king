@@ -1,0 +1,89 @@
+:root {
+  --bg-primary: #1a0a0a;
+  --bg-secondary: #2d1515;
+  --bg-card: #3a1f1f;
+  --text-primary: #f5e6d3;
+  --text-secondary: #c4a882;
+  --accent-gold: #d4a84b;
+  --accent-red: #c0392b;
+  --accent-red-light: #e74c3c;
+  --border-color: #5a3333;
+  --success: #27ae60;
+  --font-display: 'Georgia', serif;
+  --font-body: 'Segoe UI', system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Shared button styles */
+.btn {
+  padding: 0.7rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent-gold);
+  color: #1a0a0a;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #e0b85c;
+  box-shadow: 0 0 12px rgba(212, 168, 75, 0.3);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--accent-gold);
+  border: 1px solid var(--accent-gold);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(212, 168, 75, 0.1);
+}
+
+.btn-danger {
+  background: transparent;
+  color: var(--accent-red-light);
+  border: 1px solid var(--accent-red);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: rgba(192, 57, 43, 0.15);
+}
+
+.btn-back {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-back:hover:not(:disabled) {
+  border-color: var(--text-secondary);
+}

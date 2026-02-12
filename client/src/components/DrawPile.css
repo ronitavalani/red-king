@@ -1,0 +1,48 @@
+.draw-pile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.draw-pile-stack {
+  position: relative;
+  width: 80px;
+  height: 112px;
+}
+
+.draw-pile-card {
+  position: absolute;
+  width: 80px;
+  height: 112px;
+  border-radius: 8px;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      #8b1a1a,
+      #8b1a1a 5px,
+      #6b0f0f 5px,
+      #6b0f0f 10px
+    );
+  border: 2px solid #d4a84b;
+}
+
+.draw-pile-card.offset-0 {
+  top: 0;
+  left: 0;
+}
+
+.draw-pile-card.offset-1 {
+  top: -2px;
+  left: 2px;
+}
+
+.draw-pile-card.offset-2 {
+  top: -4px;
+  left: 4px;
+}
+
+.draw-pile-count {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}

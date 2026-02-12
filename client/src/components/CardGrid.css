@@ -1,0 +1,11 @@
+.card-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.card-grid-row {
+  display: flex;
+  gap: 8px;
+}
