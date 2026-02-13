@@ -1,7 +1,7 @@
 import Card from './Card';
 import './CardGrid.css';
 
-export default function CardGrid({ cards, isPeeking, onCardClick, selectableIndices, selectedIndex, size }) {
+export default function CardGrid({ cards, isPeeking, onCardClick, selectableIndices, selectedIndex, size, highlightedIndices }) {
   if (!cards || cards.length < 4) return null;
 
   const cardSize = size || 'normal';
@@ -18,6 +18,7 @@ export default function CardGrid({ cards, isPeeking, onCardClick, selectableIndi
             onClick={onCardClick ? () => onCardClick(i) : undefined}
             selectable={selectableIndices ? selectableIndices.includes(i) : false}
             selected={selectedIndex === i}
+            highlightType={highlightedIndices && highlightedIndices[i]}
           />
         ))}
       </div>
@@ -31,6 +32,7 @@ export default function CardGrid({ cards, isPeeking, onCardClick, selectableIndi
             onClick={onCardClick ? () => onCardClick(i) : undefined}
             selectable={selectableIndices ? selectableIndices.includes(i) : false}
             selected={selectedIndex === i}
+            highlightType={highlightedIndices && highlightedIndices[i]}
           />
         ))}
       </div>

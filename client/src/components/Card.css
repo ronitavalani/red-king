@@ -124,3 +124,42 @@
 .card.small .card-center-joker {
   font-size: 0.45rem;
 }
+
+/* Highlight animations for swapped/switched cards */
+.card.highlight-swap {
+  animation: highlight-swap-flash 5s ease-out forwards;
+}
+
+.card.highlight-switch {
+  animation: highlight-switch-flash 5s ease-out forwards;
+}
+
+@keyframes highlight-swap-flash {
+  0% {
+    box-shadow: 0 0 0 3px #d4a84b, 0 0 20px rgba(212, 168, 75, 0.8);
+    transform: scale(1.08);
+  }
+  15% {
+    box-shadow: 0 0 0 3px #d4a84b, 0 0 24px rgba(212, 168, 75, 0.6);
+    transform: scale(1.04);
+  }
+  100% {
+    box-shadow: none;
+    transform: scale(1);
+  }
+}
+
+@keyframes highlight-switch-flash {
+  0% {
+    box-shadow: 0 0 0 3px #e74c3c, 0 0 20px rgba(231, 76, 60, 0.8);
+    transform: scale(1.08);
+  }
+  15% {
+    box-shadow: 0 0 0 3px #e74c3c, 0 0 24px rgba(231, 76, 60, 0.6);
+    transform: scale(1.04);
+  }
+  100% {
+    box-shadow: none;
+    transform: scale(1);
+  }
+}

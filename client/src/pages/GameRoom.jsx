@@ -40,7 +40,15 @@ export default function GameRoom() {
     setPeekResult,
     blackKingPeekResult,
     setBlackKingPeekResult,
+    highlightedCards,
   } = useSocket();
+
+  // Build per-player highlight maps: { [playerId]: { [index]: type } }
+  const highlightMap = {};
+  for (const h of highlightedCards) {
+    if (!highlightMap[h.playerId]) highlightMap[h.playerId] = {};
+    highlightMap[h.playerId][h.index] = h.type;
+  }
 
   const [isPeeking, setIsPeeking] = useState(false);
   const [hasPeeked, setHasPeeked] = useState(false);
@@ -356,6 +364,7 @@ export default function GameRoom() {
                       size="small"
                       onCardClick={getOpponentCardClickHandler(opp.id)}
                       selectableIndices={getOpponentSelectableIndices(opp.id)}
+                      highlightedIndices={highlightMap[opp.id]}
                     />
                   </div>
                   {gamePhase === 'peek' && peekDonePlayers.has(opp.id) && (
@@ -479,6 +488,7 @@ export default function GameRoom() {
                 isPeeking={isPeeking}
                 onCardClick={getMyCardClickHandler()}
                 selectableIndices={getMySelectableIndices()}
+                highlightedIndices={playerInfo ? highlightMap[playerInfo.id] : undefined}
               />
             )}
           </div>

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { socket } from '../socket';
 
 const SocketContext = createContext(null);
@@ -26,6 +26,9 @@ export function SocketProvider({ children }) {
   const [activeRule, setActiveRule] = useState(null); // rule currently being executed
   const [peekResult, setPeekResult] = useState(null); // result of a peek action
   const [blackKingPeekResult, setBlackKingPeekResult] = useState(null);
+  // highlightedCards: array of {playerId, index, type} that auto-clears after timeout
+  const [highlightedCards, setHighlightedCards] = useState([]);
+  const highlightTimerRef = useRef(null);
 
   const addLog = useCallback((entry) => {
     setActionLog((prev) => [...prev.slice(-19), entry]);
@@ -183,6 +186,18 @@ export function SocketProvider({ children }) {
       addLog({ message: data.message, playerId: data.playerId });
     }
 
+    function onCardsHighlighted(data) {
+      const entries = data.cards.map((c) => ({ ...c, type: data.type }));
+      setHighlightedCards(entries);
+      // Clear any existing timer
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+      // Auto-clear after 2.5 seconds
+      highlightTimerRef.current = setTimeout(() => {
+        setHighlightedCards([]);
+        highlightTimerRef.current = null;
+      }, 2500);
+    }
+
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('room-created', onRoomCreated);
@@ -205,6 +220,7 @@ export function SocketProvider({ children }) {
     socket.on('peek-result', onPeekResult);
     socket.on('black-king-peek-result', onBlackKingPeekResult);
     socket.on('action-log', onActionLog);
+    socket.on('cards-highlighted', onCardsHighlighted);
 
     return () => {
       socket.off('connect', onConnect);
@@ -229,6 +245,7 @@ export function SocketProvider({ children }) {
       socket.off('peek-result', onPeekResult);
       socket.off('black-king-peek-result', onBlackKingPeekResult);
       socket.off('action-log', onActionLog);
+      socket.off('cards-highlighted', onCardsHighlighted);
     };
   }, [addLog]);
 
@@ -252,6 +269,11 @@ export function SocketProvider({ children }) {
     setActiveRule(null);
     setPeekResult(null);
     setBlackKingPeekResult(null);
+    setHighlightedCards([]);
+    if (highlightTimerRef.current) {
+      clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = null;
+    }
   }
 
   const value = {
@@ -281,6 +303,7 @@ export function SocketProvider({ children }) {
     setPeekResult,
     blackKingPeekResult,
     setBlackKingPeekResult,
+    highlightedCards,
   };
 
   return (

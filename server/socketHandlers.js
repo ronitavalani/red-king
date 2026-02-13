@@ -167,6 +167,12 @@ function registerSocketHandlers(io, socket) {
       action: 'kept drawn card',
     });
 
+    // Highlight the swapped card position for all players
+    io.to(room.code).emit('cards-highlighted', {
+      cards: [{ playerId: socket.id, index: handIndex }],
+      type: 'swap',
+    });
+
     advanceTurn(room.code);
     emitTurnState(io, room);
   });
@@ -288,6 +294,15 @@ function registerSocketHandlers(io, socket) {
       message: `${getPlayerName(room, socket.id)} blind switched a card between ${getPlayerName(room, playerAId)} and ${getPlayerName(room, playerBId)}`,
     });
 
+    // Highlight both switched card positions for all players
+    io.to(room.code).emit('cards-highlighted', {
+      cards: [
+        { playerId: playerAId, index: indexA },
+        { playerId: playerBId, index: indexB },
+      ],
+      type: 'switch',
+    });
+
     advanceTurn(room.code);
     emitTurnState(io, room);
   });
@@ -339,6 +354,15 @@ function registerSocketHandlers(io, socket) {
       playerId: socket.id,
       playerName: getPlayerName(room, socket.id),
       message: `${getPlayerName(room, socket.id)} switched cards between ${getPlayerName(room, playerAId)} and ${getPlayerName(room, playerBId)}`,
+    });
+
+    // Highlight both switched card positions for all players
+    io.to(room.code).emit('cards-highlighted', {
+      cards: [
+        { playerId: playerAId, index: indexA },
+        { playerId: playerBId, index: indexB },
+      ],
+      type: 'switch',
     });
 
     advanceTurn(room.code);

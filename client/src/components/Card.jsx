@@ -16,7 +16,7 @@ const SUIT_COLORS = {
   joker: '#d4a84b',
 };
 
-export default function Card({ card, faceUp, size = 'normal', onClick, selectable, selected, glowing }) {
+export default function Card({ card, faceUp, size = 'normal', onClick, selectable, selected, glowing, highlightType }) {
   const classes = [
     'card',
     faceUp && card ? 'face-up' : 'face-down',
@@ -24,6 +24,7 @@ export default function Card({ card, faceUp, size = 'normal', onClick, selectabl
     selectable ? 'selectable' : '',
     selected ? 'selected' : '',
     glowing ? 'glowing' : '',
+    highlightType ? `highlight-${highlightType}` : '',
   ].filter(Boolean).join(' ');
 
   if (!faceUp || !card) {
