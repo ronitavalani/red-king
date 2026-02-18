@@ -41,6 +41,13 @@ export default function GameRoom() {
     blackKingPeekResult,
     setBlackKingPeekResult,
     highlightedCards,
+    matchResult,
+    setMatchResult,
+    matchMode,
+    setMatchMode,
+    pendingMatchOther,
+    setPendingMatchOther,
+    handLayouts,
   } = useSocket();
 
   // Build per-player highlight maps: { [playerId]: { [index]: type } }
@@ -65,6 +72,7 @@ export default function GameRoom() {
 
   const isMyTurn = playerInfo && currentTurn === playerInfo.id;
   const hasDrawn = drawnCard !== null;
+  const canCallMatch = gamePhase === 'play' && topDiscard && !matchMode && !activeRule;
 
   useEffect(() => {
     if (roomState === 'waiting') navigate('/waiting-room');
@@ -104,6 +112,58 @@ export default function GameRoom() {
       setBlackKingPhase('peek-result');
     }
   }, [blackKingPeekResult]);
+
+  // When a successful match-other result comes in for us, enter give-card mode
+  useEffect(() => {
+    if (
+      matchResult &&
+      matchResult.success &&
+      matchResult.type === 'other' &&
+      matchResult.callerId === playerInfo?.id
+    ) {
+      setMatchMode('give-card');
+      setPendingMatchOther({
+        targetPlayerId: matchResult.targetId,
+        targetIndex: matchResult.targetIndex,
+      });
+    }
+  }, [matchResult, playerInfo, setMatchMode, setPendingMatchOther]);
+
+  // --- Match calling handlers ---
+  function handleDiscardTap() {
+    if (!canCallMatch) return;
+    setMatchMode('select-target');
+  }
+
+  function handleCancelMatch() {
+    setMatchMode(null);
+    setPendingMatchOther(null);
+  }
+
+  function handleMatchCardSelect(targetPlayerId, handIndex) {
+    if (matchMode === 'select-target') {
+      if (targetPlayerId === playerInfo.id) {
+        socket.emit('call-match-own', { handIndex });
+      } else {
+        socket.emit('call-match-other', { targetPlayerId, handIndex });
+      }
+      setMatchMode(null);
+    } else if (matchMode === 'give-card' && pendingMatchOther) {
+      // Give one of our own cards to the target
+      socket.emit('give-card-after-match', {
+        callerHandIndex: handIndex,
+        targetPlayerId: pendingMatchOther.targetPlayerId,
+        targetIndex: pendingMatchOther.targetIndex,
+      });
+      setMatchMode(null);
+      setPendingMatchOther(null);
+      setMatchResult(null);
+    }
+  }
+
+  function dismissMatchResult() {
+    setMatchResult(null);
+  }
 
   function handlePeek() {
     setIsPeeking(true);
@@ -203,11 +263,33 @@ export default function GameRoom() {
 
   function dismissPeekResult() {
     setPeekResult(null);
+    socket.emit('finish-peek');
+  }
+
+  // Helper to get non-null indices for own hand
+  function myNonNullIndices() {
+    if (!myCards) return [];
+    return myCards.map((c, i) => c !== null ? i : -1).filter((i) => i !== -1);
+  }
+
+  // Helper to get non-null indices from an opponent's layout
+  function oppNonNullIndices(oppId) {
+    const layout = handLayouts[oppId];
+    if (!layout) return [0, 1, 2, 3]; // default 4 cards
+    return layout.map((hasCard, i) => hasCard ? i : -1).filter((i) => i !== -1);
   }
 
   // Determine what click handler to use for cards based on current state
   function getMyCardClickHandler() {
     if (gamePhase !== 'play') return undefined;
+
+    // Match mode: selecting a card to match or give
+    if (matchMode === 'select-target') {
+      return (index) => handleMatchCardSelect(playerInfo.id, index);
+    }
+    if (matchMode === 'give-card') {
+      return (index) => handleMatchCardSelect(playerInfo.id, index);
+    }
 
     // Keeping drawn card - select which card to replace
     if (isMyTurn && hasDrawn && !activeRule) {
@@ -238,7 +320,14 @@ export default function GameRoom() {
   }
 
   function getOpponentCardClickHandler(oppId) {
-    if (gamePhase !== 'play' || !isMyTurn) return undefined;
+    if (gamePhase !== 'play') return undefined;
+
+    // Match mode: selecting opponent card to match
+    if (matchMode === 'select-target') {
+      return (index) => handleMatchCardSelect(oppId, index);
+    }
+
+    if (!isMyTurn) return undefined;
 
     // Peek other rule
     if (activeRule === 'peek-other' && ruleStep === 'executing') {
@@ -265,19 +354,31 @@ export default function GameRoom() {
 
   function getMySelectableIndices() {
     if (gamePhase !== 'play') return undefined;
-    if (isMyTurn && hasDrawn && !activeRule) return [0, 1, 2, 3];
-    if (isMyTurn && activeRule === 'peek-own') return [0, 1, 2, 3];
-    if (isMyTurn && activeRule === 'blind-switch') return [0, 1, 2, 3];
-    if (isMyTurn && activeRule === 'black-king' && (blackKingPhase === 'peek-select' || blackKingPhase === 'switch-select')) return [0, 1, 2, 3];
+    const indices = myNonNullIndices();
+    if (matchMode === 'select-target' || matchMode === 'give-card') return indices;
+    if (isMyTurn && hasDrawn && !activeRule) return indices;
+    if (isMyTurn && activeRule === 'peek-own') return indices;
+    if (isMyTurn && activeRule === 'blind-switch') return indices;
+    if (isMyTurn && activeRule === 'black-king' && (blackKingPhase === 'peek-select' || blackKingPhase === 'switch-select')) return indices;
     return undefined;
   }
 
   function getOpponentSelectableIndices(oppId) {
-    if (gamePhase !== 'play' || !isMyTurn) return undefined;
-    if (activeRule === 'peek-other') return [0, 1, 2, 3];
-    if (activeRule === 'blind-switch') return [0, 1, 2, 3];
-    if (activeRule === 'black-king' && (blackKingPhase === 'peek-select' || blackKingPhase === 'switch-select')) return [0, 1, 2, 3];
+    if (gamePhase !== 'play') return undefined;
+    const indices = oppNonNullIndices(oppId);
+    if (matchMode === 'select-target') return indices;
+    if (!isMyTurn) return undefined;
+    if (activeRule === 'peek-other') return indices;
+    if (activeRule === 'blind-switch') return indices;
+    if (activeRule === 'black-king' && (blackKingPhase === 'peek-select' || blackKingPhase === 'switch-select')) return indices;
     return undefined;
+  }
+
+  // Build opponent cards array from layout: true → face-down placeholder, false → null (empty slot)
+  function getOpponentCards(oppId) {
+    const layout = handLayouts[oppId];
+    if (!layout) return Array(4).fill(false); // default: 4 face-down cards
+    return layout.map((hasCard) => (hasCard ? false : null));
   }
 
   // Get the turn player's name
@@ -297,6 +398,10 @@ export default function GameRoom() {
     }
 
     if (gamePhase === 'play') {
+      // Match mode instructions (can happen any time, not just your turn)
+      if (matchMode === 'select-target') return 'Pick a card to match against the discard pile';
+      if (matchMode === 'give-card') return 'Pick one of YOUR cards to give to the other player';
+
       if (!isMyTurn) return `${getTurnPlayerName()} turn`;
 
       if (activeRule) {
@@ -343,8 +448,9 @@ export default function GameRoom() {
         <div className="game-area">
           {/* Instruction banner */}
           {gamePhase && (
-            <div className={`instruction-banner ${isMyTurn ? 'your-turn' : ''}`}>
-              {isMyTurn && gamePhase === 'play' && <span className="turn-indicator">YOUR TURN</span>}
+            <div className={`instruction-banner ${isMyTurn ? 'your-turn' : ''} ${matchMode ? 'match-mode' : ''}`}>
+              {matchMode && <span className="turn-indicator match-indicator">MATCH</span>}
+              {!matchMode && isMyTurn && gamePhase === 'play' && <span className="turn-indicator">YOUR TURN</span>}
               <span className="instruction-text">{getInstructionText()}</span>
             </div>
           )}
@@ -359,7 +465,7 @@ export default function GameRoom() {
                   </span>
                   <div className="opponent-cards">
                     <CardGrid
-                      cards={Array.from({ length: 4 }).map(() => null)}
+                      cards={getOpponentCards(opp.id)}
                       isPeeking={false}
                       size="small"
                       onCardClick={getOpponentCardClickHandler(opp.id)}
@@ -380,7 +486,11 @@ export default function GameRoom() {
                 onClick={handleDrawCard}
                 canDraw={isMyTurn && !hasDrawn && gamePhase === 'play' && !activeRule}
               />
-              <DiscardPile topCard={topDiscard} />
+              <DiscardPile
+                topCard={topDiscard}
+                onClick={handleDiscardTap}
+                canMatch={canCallMatch}
+              />
             </div>
 
             {/* Drawn card display */}
@@ -460,12 +570,28 @@ export default function GameRoom() {
                 </button>
               </div>
             )}
+
+            {/* Match mode cancel button */}
+            {matchMode === 'select-target' && (
+              <div className="rule-execution-area match-execution-area">
+                <span className="rule-label">Calling a Match...</span>
+                <button className="btn btn-danger btn-sm" onClick={handleCancelMatch}>
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {matchMode === 'give-card' && (
+              <div className="rule-execution-area match-execution-area">
+                <span className="rule-label">Pick a card to give away</span>
+              </div>
+            )}
           </div>
 
           {/* Peek result overlay */}
           {peekResult && (
-            <div className="peek-result-overlay" onClick={dismissPeekResult}>
-              <div className="peek-result-content" onClick={(e) => e.stopPropagation()}>
+            <div className="peek-result-overlay">
+              <div className="peek-result-content">
                 <span className="peek-result-label">
                   {peekResult.targetPlayerId
                     ? `${(players.find((p) => p.id === peekResult.targetPlayerId) || opponents.find((o) => o.id === peekResult.targetPlayerId))?.name}'s card #${peekResult.handIndex + 1}`
@@ -474,7 +600,37 @@ export default function GameRoom() {
                 </span>
                 <Card card={peekResult.card} faceUp={true} />
                 <button className="btn btn-primary btn-sm" onClick={dismissPeekResult}>
-                  Got it
+                  Finish Peeking
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Match result overlay */}
+          {matchResult && matchMode !== 'give-card' && (
+            <div className="peek-result-overlay" onClick={dismissMatchResult}>
+              <div className={`peek-result-content match-result-content ${matchResult.success ? 'match-success' : 'match-fail'}`} onClick={(e) => e.stopPropagation()}>
+                <span className="match-result-title">
+                  {matchResult.success ? 'Match!' : 'Wrong!'}
+                </span>
+                <span className="peek-result-label">
+                  {matchResult.callerName}
+                  {matchResult.type === 'own'
+                    ? ' matched their own card'
+                    : matchResult.success
+                      ? ` matched ${matchResult.targetName}'s card`
+                      : ` tried to match ${matchResult.targetName}'s card`
+                  }
+                </span>
+                <Card card={matchResult.card} faceUp={true} />
+                <span className="match-result-detail">
+                  {matchResult.success
+                    ? 'Card removed from hand!'
+                    : 'Penalty card drawn from deck'
+                  }
+                </span>
+                <button className="btn btn-primary btn-sm" onClick={dismissMatchResult}>
+                  OK
                 </button>
               </div>
             </div>

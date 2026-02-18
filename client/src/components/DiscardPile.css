@@ -25,3 +25,33 @@
   color: var(--text-secondary);
   font-size: 0.85rem;
 }
+
+.discard-pile-matchable {
+  cursor: pointer;
+  position: relative;
+}
+
+.discard-pile-matchable .discard-pile-label {
+  color: var(--accent-gold);
+  font-weight: 600;
+  animation: match-pulse 1.5s ease-in-out infinite alternate;
+}
+
+.discard-pile-matchable::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 2px solid var(--accent-gold);
+  border-radius: 12px;
+  animation: match-pulse 1.5s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes match-pulse {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
+}

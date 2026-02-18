@@ -363,3 +363,45 @@
   padding: 0.4rem 0.9rem;
   font-size: 0.82rem;
 }
+
+/* Match mode */
+.instruction-banner.match-mode {
+  border-color: #e74c3c;
+  background: rgba(231, 76, 60, 0.08);
+}
+
+.match-indicator {
+  background: #e74c3c !important;
+  color: #fff !important;
+}
+
+.match-execution-area {
+  border-color: #e74c3c;
+  background: rgba(231, 76, 60, 0.08);
+}
+
+/* Match result overlay */
+.match-result-content {
+  min-width: 220px;
+}
+
+.match-result-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  font-family: var(--font-display);
+  letter-spacing: 0.05em;
+}
+
+.match-result-content.match-success .match-result-title {
+  color: var(--success, #27ae60);
+}
+
+.match-result-content.match-fail .match-result-title {
+  color: #e74c3c;
+}
+
+.match-result-detail {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-style: italic;
+}

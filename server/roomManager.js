@@ -45,7 +45,10 @@ function getCardPoints(card) {
 }
 
 function getPlayerScore(hand) {
-  return hand.reduce((sum, card) => sum + getCardPoints(card), 0);
+  return hand.reduce((sum, card) => {
+    if (card === null) return sum; // skip empty slots
+    return sum + getCardPoints(card);
+  }, 0);
 }
 
 function createRoom(hostSocketId, hostName) {
@@ -244,6 +247,7 @@ function keepCard(roomCode, playerId, handIndex) {
 
   const hand = room.gameState.hands[playerId];
   if (!hand || handIndex < 0 || handIndex >= hand.length) return null;
+  if (hand[handIndex] === null) return null; // can't swap with empty slot
 
   const discarded = hand[handIndex];
   hand[handIndex] = room.gameState.drawnCard;
@@ -277,6 +281,7 @@ function peekOwnCard(roomCode, playerId, handIndex) {
 
   const hand = room.gameState.hands[playerId];
   if (!hand || handIndex < 0 || handIndex >= hand.length) return null;
+  if (hand[handIndex] === null) return null; // empty slot
 
   return hand[handIndex];
 }
@@ -288,6 +293,7 @@ function peekOtherCard(roomCode, targetPlayerId, handIndex) {
 
   const hand = room.gameState.hands[targetPlayerId];
   if (!hand || handIndex < 0 || handIndex >= hand.length) return null;
+  if (hand[handIndex] === null) return null; // empty slot
 
   return hand[handIndex];
 }
@@ -302,6 +308,7 @@ function blindSwitch(roomCode, playerAId, indexA, playerBId, indexB) {
   if (!handA || !handB) return null;
   if (indexA < 0 || indexA >= handA.length) return null;
   if (indexB < 0 || indexB >= handB.length) return null;
+  if (handA[indexA] === null || handB[indexB] === null) return null; // can't switch empty slots
 
   const temp = handA[indexA];
   handA[indexA] = handB[indexB];
@@ -320,6 +327,7 @@ function blackKingPeek(roomCode, targetPlayerId1, index1, targetPlayerId2, index
   if (!hand1 || !hand2) return null;
   if (index1 < 0 || index1 >= hand1.length) return null;
   if (index2 < 0 || index2 >= hand2.length) return null;
+  if (hand1[index1] === null || hand2[index2] === null) return null; // can't peek empty slots
 
   return {
     card1: hand1[index1],
@@ -348,6 +356,118 @@ function getTopDiscard(roomCode) {
   return pile.length > 0 ? pile[pile.length - 1] : null;
 }
 
+// Check if two cards match by rank
+function cardsMatchByRank(cardA, cardB) {
+  if (!cardA || !cardB) return false;
+  return cardA.rank === cardB.rank;
+}
+
+// Call match on your own card: reveal it, check against top discard
+function callMatchOwn(roomCode, callerId, handIndex) {
+  const room = rooms.get(roomCode);
+  if (!room || !room.gameState) return null;
+
+  const topDiscard = getTopDiscard(roomCode);
+  if (!topDiscard) return null;
+
+  const hand = room.gameState.hands[callerId];
+  if (!hand || handIndex < 0 || handIndex >= hand.length) return null;
+  if (hand[handIndex] === null) return null; // can't match empty slot
+
+  const revealedCard = hand[handIndex];
+  const isMatch = cardsMatchByRank(revealedCard, topDiscard);
+
+  if (isMatch) {
+    // Set slot to null (gap) instead of splice, add to discard pile
+    hand[handIndex] = null;
+    room.gameState.discardPile.push(revealedCard);
+    return { success: true, card: revealedCard, newHand: hand };
+  } else {
+    // Penalty: draw a card from deck and append to hand
+    if (room.gameState.deck.length > 0) {
+      const penaltyCard = room.gameState.deck.pop();
+      hand.push(penaltyCard);
+      return { success: false, card: revealedCard, penaltyCard, newHand: hand };
+    }
+    return { success: false, card: revealedCard, penaltyCard: null, newHand: hand };
+  }
+}
+
+// Call match on another player's card: reveal it, check against top discard
+function callMatchOther(roomCode, callerId, targetPlayerId, targetIndex) {
+  const room = rooms.get(roomCode);
+  if (!room || !room.gameState) return null;
+
+  const topDiscard = getTopDiscard(roomCode);
+  if (!topDiscard) return null;
+
+  const targetHand = room.gameState.hands[targetPlayerId];
+  if (!targetHand || targetIndex < 0 || targetIndex >= targetHand.length) return null;
+  if (targetHand[targetIndex] === null) return null; // can't match empty slot
+
+  const revealedCard = targetHand[targetIndex];
+  const isMatch = cardsMatchByRank(revealedCard, topDiscard);
+
+  if (isMatch) {
+    // Card matched - don't remove yet, wait for caller to give a card
+    return { success: true, card: revealedCard, targetIndex };
+  } else {
+    // Penalty: caller draws a card from deck
+    const callerHand = room.gameState.hands[callerId];
+    if (!callerHand) return null;
+    if (room.gameState.deck.length > 0) {
+      const penaltyCard = room.gameState.deck.pop();
+      callerHand.push(penaltyCard);
+      return { success: false, card: revealedCard, penaltyCard, callerHand };
+    }
+    return { success: false, card: revealedCard, penaltyCard: null, callerHand };
+  }
+}
+
+// After a successful match-other: caller gives one of their cards to target,
+// and target's matched card is discarded
+function giveCardAfterMatch(roomCode, callerId, callerHandIndex, targetPlayerId, targetIndex) {
+  const room = rooms.get(roomCode);
+  if (!room || !room.gameState) return null;
+
+  const callerHand = room.gameState.hands[callerId];
+  const targetHand = room.gameState.hands[targetPlayerId];
+  if (!callerHand || !targetHand) return null;
+  if (callerHandIndex < 0 || callerHandIndex >= callerHand.length) return null;
+  if (callerHand[callerHandIndex] === null) return null; // can't give empty slot
+  if (targetIndex < 0 || targetIndex >= targetHand.length) return null;
+
+  // Set matched card slot to null (gap) and discard it
+  const matchedCard = targetHand[targetIndex];
+  targetHand[targetIndex] = null;
+  room.gameState.discardPile.push(matchedCard);
+
+  // Set given card slot to null (gap) and append to target's hand
+  const givenCard = callerHand[callerHandIndex];
+  callerHand[callerHandIndex] = null;
+  targetHand.push(givenCard);
+  const placedIndex = targetHand.length - 1;
+
+  return {
+    matchedCard,
+    givenCard,
+    callerHand,
+    targetHand,
+    placedIndex,
+  };
+}
+
+// Get hand layouts: for each player, an array of booleans (true = card, false = empty slot)
+function getHandLayouts(roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room || !room.gameState) return {};
+  const layouts = {};
+  for (const [playerId, hand] of Object.entries(room.gameState.hands)) {
+    layouts[playerId] = hand.map((card) => card !== null);
+  }
+  return layouts;
+}
+
 module.exports = {
   createRoom,
   joinRoom,
@@ -372,4 +492,8 @@ module.exports = {
   getTopDiscard,
   getCardPoints,
   getPlayerScore,
+  callMatchOwn,
+  callMatchOther,
+  giveCardAfterMatch,
+  getHandLayouts,
 };

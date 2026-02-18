@@ -1,9 +1,12 @@
 import Card from './Card';
 import './DiscardPile.css';
 
-export default function DiscardPile({ topCard }) {
+export default function DiscardPile({ topCard, onClick, canMatch }) {
   return (
-    <div className="discard-pile">
+    <div
+      className={`discard-pile ${canMatch ? 'discard-pile-matchable' : ''}`}
+      onClick={canMatch ? onClick : undefined}
+    >
       {topCard ? (
         <Card card={topCard} faceUp={true} />
       ) : (
@@ -11,7 +14,9 @@ export default function DiscardPile({ topCard }) {
           <span>Discard</span>
         </div>
       )}
-      <span className="discard-pile-label">Discard</span>
+      <span className="discard-pile-label">
+        {canMatch ? 'Tap to Match' : 'Discard'}
+      </span>
     </div>
   );
 }

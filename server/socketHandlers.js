@@ -18,6 +18,10 @@ const {
   blackKingPeek,
   advanceTurn,
   getTopDiscard,
+  callMatchOwn,
+  callMatchOther,
+  giveCardAfterMatch,
+  getHandLayouts,
 } = require('./roomManager');
 
 function getPlayerName(room, playerId) {
@@ -208,7 +212,7 @@ function registerSocketHandlers(io, socket) {
         card,
         action: 'discarded',
       });
-      const nextTurn = advanceTurn(room.code);
+      advanceTurn(room.code);
       emitTurnState(io, room);
     }
   });
@@ -228,7 +232,7 @@ function registerSocketHandlers(io, socket) {
     emitTurnState(io, room);
   });
 
-  // 7 or 8: Peek at own card
+  // 7 or 8: Peek at own card (turn advances when player finishes peeking)
   socket.on('use-peek-own', ({ handIndex }) => {
     const room = getRoomBySocketId(socket.id);
     if (!room || !room.gameState) return;
@@ -241,14 +245,11 @@ function registerSocketHandlers(io, socket) {
     io.to(room.code).emit('action-log', {
       playerId: socket.id,
       playerName: getPlayerName(room, socket.id),
-      message: `${getPlayerName(room, socket.id)} peeked at one of their own cards`,
+      message: `${getPlayerName(room, socket.id)} is peeking at one of their own cards...`,
     });
-
-    advanceTurn(room.code);
-    emitTurnState(io, room);
   });
 
-  // 9 or 10: Peek at someone else's card
+  // 9 or 10: Peek at someone else's card (turn advances when player finishes peeking)
   socket.on('use-peek-other', ({ targetPlayerId, handIndex }) => {
     const room = getRoomBySocketId(socket.id);
     if (!room || !room.gameState) return;
@@ -261,7 +262,19 @@ function registerSocketHandlers(io, socket) {
     io.to(room.code).emit('action-log', {
       playerId: socket.id,
       playerName: getPlayerName(room, socket.id),
-      message: `${getPlayerName(room, socket.id)} peeked at one of ${getPlayerName(room, targetPlayerId)}'s cards`,
+      message: `${getPlayerName(room, socket.id)} is peeking at one of ${getPlayerName(room, targetPlayerId)}'s cards...`,
+    });
+  });
+
+  // Player finished looking at peeked card - now advance the turn
+  socket.on('finish-peek', () => {
+    const room = getRoomBySocketId(socket.id);
+    if (!room || !room.gameState) return;
+
+    io.to(room.code).emit('action-log', {
+      playerId: socket.id,
+      playerName: getPlayerName(room, socket.id),
+      message: `${getPlayerName(room, socket.id)} finished peeking`,
     });
 
     advanceTurn(room.code);
@@ -382,6 +395,188 @@ function registerSocketHandlers(io, socket) {
 
     advanceTurn(room.code);
     emitTurnState(io, room);
+  });
+
+  // --- MATCH CALLING EVENTS ---
+
+  // Helper: broadcast updated hand layouts to all players
+  function emitHandLayouts(room) {
+    const layouts = getHandLayouts(room.code);
+    io.to(room.code).emit('hand-layouts-updated', { layouts });
+  }
+
+  // Call match on your own card
+  socket.on('call-match-own', ({ handIndex }) => {
+    const room = getRoomBySocketId(socket.id);
+    if (!room || !room.gameState || room.gameState.phase !== 'play') return;
+
+    const result = callMatchOwn(room.code, socket.id, handIndex);
+    if (!result) return;
+
+    const callerName = getPlayerName(room, socket.id);
+
+    if (result.success) {
+      // Correct match - card removed
+      socket.emit('hand-updated', { myCards: room.gameState.hands[socket.id] });
+
+      io.to(room.code).emit('match-result', {
+        callerId: socket.id,
+        callerName,
+        targetId: socket.id,
+        targetName: callerName,
+        card: result.card,
+        success: true,
+        type: 'own',
+      });
+
+      io.to(room.code).emit('card-discarded', {
+        playerId: socket.id,
+        playerName: callerName,
+        card: result.card,
+        action: 'matched their own card!',
+      });
+
+      emitHandLayouts(room);
+
+      // Highlight the now-empty slot
+      io.to(room.code).emit('cards-highlighted', {
+        cards: [{ playerId: socket.id, index: handIndex }],
+        type: 'match',
+      });
+    } else {
+      // Wrong - penalty card added
+      socket.emit('hand-updated', { myCards: room.gameState.hands[socket.id] });
+
+      io.to(room.code).emit('match-result', {
+        callerId: socket.id,
+        callerName,
+        targetId: socket.id,
+        targetName: callerName,
+        card: result.card,
+        success: false,
+        type: 'own',
+      });
+
+      io.to(room.code).emit('action-log', {
+        playerId: socket.id,
+        playerName: callerName,
+        message: `${callerName} called a wrong match and took a penalty card`,
+      });
+
+      emitHandLayouts(room);
+
+      // Update deck count for everyone
+      io.to(room.code).emit('turn-update', {
+        currentTurn: getCurrentTurnPlayer(room.code),
+        deckCount: room.gameState.deck.length,
+        topDiscard: room.gameState.discardPile.length > 0
+          ? room.gameState.discardPile[room.gameState.discardPile.length - 1]
+          : null,
+      });
+    }
+  });
+
+  // Call match on another player's card
+  socket.on('call-match-other', ({ targetPlayerId, handIndex }) => {
+    const room = getRoomBySocketId(socket.id);
+    if (!room || !room.gameState || room.gameState.phase !== 'play') return;
+
+    const result = callMatchOther(room.code, socket.id, targetPlayerId, handIndex);
+    if (!result) return;
+
+    const callerName = getPlayerName(room, socket.id);
+    const targetName = getPlayerName(room, targetPlayerId);
+
+    if (result.success) {
+      // Correct match - tell caller to pick a card to give
+      io.to(room.code).emit('match-result', {
+        callerId: socket.id,
+        callerName,
+        targetId: targetPlayerId,
+        targetName,
+        card: result.card,
+        success: true,
+        type: 'other',
+        targetIndex: result.targetIndex,
+      });
+    } else {
+      // Wrong - penalty card added to caller
+      socket.emit('hand-updated', { myCards: result.callerHand });
+
+      io.to(room.code).emit('match-result', {
+        callerId: socket.id,
+        callerName,
+        targetId: targetPlayerId,
+        targetName,
+        card: result.card,
+        success: false,
+        type: 'other',
+      });
+
+      io.to(room.code).emit('action-log', {
+        playerId: socket.id,
+        playerName: callerName,
+        message: `${callerName} called a wrong match on ${targetName}'s card and took a penalty card`,
+      });
+
+      emitHandLayouts(room);
+
+      io.to(room.code).emit('turn-update', {
+        currentTurn: getCurrentTurnPlayer(room.code),
+        deckCount: room.gameState.deck.length,
+        topDiscard: room.gameState.discardPile.length > 0
+          ? room.gameState.discardPile[room.gameState.discardPile.length - 1]
+          : null,
+      });
+    }
+  });
+
+  // After successful match-other: caller gives one of their cards to the target
+  socket.on('give-card-after-match', ({ callerHandIndex, targetPlayerId, targetIndex }) => {
+    const room = getRoomBySocketId(socket.id);
+    if (!room || !room.gameState) return;
+
+    const result = giveCardAfterMatch(room.code, socket.id, callerHandIndex, targetPlayerId, targetIndex);
+    if (!result) return;
+
+    const callerName = getPlayerName(room, socket.id);
+    const targetName = getPlayerName(room, targetPlayerId);
+
+    // Update both players' hands
+    socket.emit('hand-updated', { myCards: result.callerHand });
+    io.to(targetPlayerId).emit('hand-updated', { myCards: result.targetHand });
+
+    io.to(room.code).emit('card-discarded', {
+      playerId: socket.id,
+      playerName: callerName,
+      card: result.matchedCard,
+      action: `matched ${targetName}'s card and gave them a card`,
+    });
+
+    io.to(room.code).emit('action-log', {
+      playerId: socket.id,
+      playerName: callerName,
+      message: `${callerName} gave a card to ${targetName}`,
+    });
+
+    emitHandLayouts(room);
+
+    // Highlight: caller's now-empty slot and target's new card slot
+    io.to(room.code).emit('cards-highlighted', {
+      cards: [
+        { playerId: socket.id, index: callerHandIndex },
+        { playerId: targetPlayerId, index: result.placedIndex },
+      ],
+      type: 'match',
+    });
+
+    io.to(room.code).emit('turn-update', {
+      currentTurn: getCurrentTurnPlayer(room.code),
+      deckCount: room.gameState.deck.length,
+      topDiscard: room.gameState.discardPile.length > 0
+        ? room.gameState.discardPile[room.gameState.discardPile.length - 1]
+        : null,
+    });
   });
 
   // --- END GAMEPLAY EVENTS ---

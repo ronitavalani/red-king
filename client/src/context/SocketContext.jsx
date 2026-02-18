@@ -30,6 +30,13 @@ export function SocketProvider({ children }) {
   const [highlightedCards, setHighlightedCards] = useState([]);
   const highlightTimerRef = useRef(null);
 
+  // Match-calling state
+  const [matchResult, setMatchResult] = useState(null);
+  const [matchMode, setMatchMode] = useState(null); // 'select-own' | 'select-other' | 'give-card' | null
+  const [pendingMatchOther, setPendingMatchOther] = useState(null); // { targetPlayerId, targetIndex }
+  const [handLayouts, setHandLayouts] = useState({}); // { [playerId]: boolean[] }
+  const matchResultTimerRef = useRef(null);
+
   const addLog = useCallback((entry) => {
     setActionLog((prev) => [...prev.slice(-19), entry]);
   }, []);
@@ -106,6 +113,10 @@ export function SocketProvider({ children }) {
       setActiveRule(null);
       setPeekResult(null);
       setBlackKingPeekResult(null);
+      setMatchResult(null);
+      setMatchMode(null);
+      setPendingMatchOther(null);
+      setHandLayouts({});
     }
 
     function onYouLeft() {
@@ -191,11 +202,29 @@ export function SocketProvider({ children }) {
       setHighlightedCards(entries);
       // Clear any existing timer
       if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-      // Auto-clear after 2.5 seconds
+      // Auto-clear after 5 seconds
       highlightTimerRef.current = setTimeout(() => {
         setHighlightedCards([]);
         highlightTimerRef.current = null;
-      }, 2500);
+      }, 5000);
+    }
+
+    function onMatchResult(data) {
+      setMatchResult(data);
+      // If it's a successful match-other, the caller needs to give a card
+      // The caller's UI will handle that via matchMode='give-card'
+      // Auto-dismiss match result after 4 seconds (unless it needs action)
+      if (matchResultTimerRef.current) clearTimeout(matchResultTimerRef.current);
+      if (!(data.success && data.type === 'other')) {
+        matchResultTimerRef.current = setTimeout(() => {
+          setMatchResult(null);
+          matchResultTimerRef.current = null;
+        }, 4000);
+      }
+    }
+
+    function onHandLayoutsUpdated(data) {
+      setHandLayouts(data.layouts);
     }
 
     socket.on('connect', onConnect);
@@ -221,6 +250,8 @@ export function SocketProvider({ children }) {
     socket.on('black-king-peek-result', onBlackKingPeekResult);
     socket.on('action-log', onActionLog);
     socket.on('cards-highlighted', onCardsHighlighted);
+    socket.on('match-result', onMatchResult);
+    socket.on('hand-layouts-updated', onHandLayoutsUpdated);
 
     return () => {
       socket.off('connect', onConnect);
@@ -246,6 +277,8 @@ export function SocketProvider({ children }) {
       socket.off('black-king-peek-result', onBlackKingPeekResult);
       socket.off('action-log', onActionLog);
       socket.off('cards-highlighted', onCardsHighlighted);
+      socket.off('match-result', onMatchResult);
+      socket.off('hand-layouts-updated', onHandLayoutsUpdated);
     };
   }, [addLog]);
 
@@ -273,6 +306,14 @@ export function SocketProvider({ children }) {
     if (highlightTimerRef.current) {
       clearTimeout(highlightTimerRef.current);
       highlightTimerRef.current = null;
+    }
+    setMatchResult(null);
+    setMatchMode(null);
+    setPendingMatchOther(null);
+    setHandLayouts({});
+    if (matchResultTimerRef.current) {
+      clearTimeout(matchResultTimerRef.current);
+      matchResultTimerRef.current = null;
     }
   }
 
@@ -304,6 +345,13 @@ export function SocketProvider({ children }) {
     blackKingPeekResult,
     setBlackKingPeekResult,
     highlightedCards,
+    matchResult,
+    setMatchResult,
+    matchMode,
+    setMatchMode,
+    pendingMatchOther,
+    setPendingMatchOther,
+    handLayouts,
   };
 
   return (
