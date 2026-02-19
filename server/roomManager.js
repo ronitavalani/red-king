@@ -203,7 +203,13 @@ function setGamePhase(roomCode, phase) {
 
 function getCurrentTurnPlayer(roomCode) {
   const room = rooms.get(roomCode);
-  if (!room || !room.gameState || !room.gameState.turnOrder) return null;
+  if (!room || !room.gameState) return null;
+
+  if (room.gameState.phase === 'redemption' && room.gameState.redemptionOrder) {
+    return room.gameState.redemptionOrder[room.gameState.redemptionIndex];
+  }
+
+  if (!room.gameState.turnOrder) return null;
   return room.gameState.turnOrder[room.gameState.turnIndex];
 }
 
@@ -335,6 +341,17 @@ function blackKingPeek(roomCode, targetPlayerId1, index1, targetPlayerId2, index
   };
 }
 
+// Place a card into a hand, preferring empty slots over appending
+function addCardToHand(hand, card) {
+  const emptyIndex = hand.indexOf(null);
+  if (emptyIndex !== -1) {
+    hand[emptyIndex] = card;
+    return emptyIndex;
+  }
+  hand.push(card);
+  return hand.length - 1;
+}
+
 function advanceTurn(roomCode) {
   const room = rooms.get(roomCode);
   if (!room || !room.gameState || !room.gameState.turnOrder) return null;
@@ -386,7 +403,7 @@ function callMatchOwn(roomCode, callerId, handIndex) {
     // Penalty: draw a card from deck and append to hand
     if (room.gameState.deck.length > 0) {
       const penaltyCard = room.gameState.deck.pop();
-      hand.push(penaltyCard);
+      addCardToHand(hand, penaltyCard);
       return { success: false, card: revealedCard, penaltyCard, newHand: hand };
     }
     return { success: false, card: revealedCard, penaltyCard: null, newHand: hand };
@@ -417,7 +434,7 @@ function callMatchOther(roomCode, callerId, targetPlayerId, targetIndex) {
     if (!callerHand) return null;
     if (room.gameState.deck.length > 0) {
       const penaltyCard = room.gameState.deck.pop();
-      callerHand.push(penaltyCard);
+      addCardToHand(callerHand, penaltyCard);
       return { success: false, card: revealedCard, penaltyCard, callerHand };
     }
     return { success: false, card: revealedCard, penaltyCard: null, callerHand };
@@ -442,11 +459,10 @@ function giveCardAfterMatch(roomCode, callerId, callerHandIndex, targetPlayerId,
   targetHand[targetIndex] = null;
   room.gameState.discardPile.push(matchedCard);
 
-  // Set given card slot to null (gap) and append to target's hand
+  // Set given card slot to null (gap) and place in target's hand (prefer empty slot)
   const givenCard = callerHand[callerHandIndex];
   callerHand[callerHandIndex] = null;
-  targetHand.push(givenCard);
-  const placedIndex = targetHand.length - 1;
+  const placedIndex = addCardToHand(targetHand, givenCard);
 
   return {
     matchedCard,
@@ -466,6 +482,107 @@ function getHandLayouts(roomCode) {
     layouts[playerId] = hand.map((card) => card !== null);
   }
   return layouts;
+}
+
+// Call Red King: declare you have the lowest score, triggering redemption round
+function callRedKing(roomCode, playerId) {
+  const room = rooms.get(roomCode);
+  if (!room || !room.gameState || room.gameState.phase !== 'play') return null;
+  if (getCurrentTurnPlayer(roomCode) !== playerId) return null;
+  if (room.gameState.drawnCard) return null; // can't call after drawing
+
+  room.gameState.redKingCaller = playerId;
+  room.gameState.phase = 'redemption';
+
+  // Build redemption turn order: everyone except the caller, starting from next player
+  const turnOrder = room.gameState.turnOrder;
+  const callerIdx = turnOrder.indexOf(playerId);
+  const redemptionOrder = [];
+  for (let i = 1; i < turnOrder.length; i++) {
+    const idx = (callerIdx + i) % turnOrder.length;
+    redemptionOrder.push(turnOrder[idx]);
+  }
+
+  room.gameState.redemptionOrder = redemptionOrder;
+  room.gameState.redemptionIndex = 0;
+
+  // Clean up any drawn card state
+  room.gameState.drawnCard = null;
+  room.gameState.drawnBy = null;
+
+  return {
+    redKingCaller: playerId,
+    redemptionOrder,
+    currentTurn: redemptionOrder[0],
+  };
+}
+
+// Advance to the next player's redemption turn, or end redemption
+function advanceRedemptionTurn(roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room || !room.gameState || room.gameState.phase !== 'redemption') return null;
+
+  room.gameState.redemptionIndex++;
+  room.gameState.drawnCard = null;
+  room.gameState.drawnBy = null;
+
+  if (room.gameState.redemptionIndex >= room.gameState.redemptionOrder.length) {
+    room.gameState.phase = 'reveal';
+    return { phase: 'reveal' };
+  }
+
+  return {
+    phase: 'redemption',
+    currentTurn: room.gameState.redemptionOrder[room.gameState.redemptionIndex],
+  };
+}
+
+// Calculate final scores and determine the winner
+function getGameResults(roomCode) {
+  const room = rooms.get(roomCode);
+  if (!room || !room.gameState) return null;
+
+  const callerId = room.gameState.redKingCaller;
+  const results = [];
+
+  for (const player of room.players) {
+    const hand = room.gameState.hands[player.id];
+    if (!hand) continue;
+    const score = getPlayerScore(hand);
+    results.push({
+      id: player.id,
+      name: player.name,
+      hand: hand.filter((c) => c !== null),
+      score,
+      isCaller: player.id === callerId,
+    });
+  }
+
+  // Sort by score ascending (lowest is best)
+  results.sort((a, b) => a.score - b.score);
+
+  const lowestScore = results[0].score;
+  const playersWithLowest = results.filter((r) => r.score === lowestScore);
+
+  let winnerId;
+  if (playersWithLowest.length === 1) {
+    winnerId = playersWithLowest[0].id;
+  } else {
+    // Tie: non-caller wins over caller
+    const nonCallerTied = playersWithLowest.filter((r) => r.id !== callerId);
+    winnerId = nonCallerTied.length > 0 ? nonCallerTied[0].id : playersWithLowest[0].id;
+  }
+
+  const winner = results.find((r) => r.id === winnerId);
+  const caller = results.find((r) => r.id === callerId);
+
+  return {
+    results,
+    winnerId,
+    winnerName: winner ? winner.name : 'Unknown',
+    callerId,
+    callerName: caller ? caller.name : 'Unknown',
+  };
 }
 
 module.exports = {
@@ -496,4 +613,7 @@ module.exports = {
   callMatchOther,
   giveCardAfterMatch,
   getHandLayouts,
+  callRedKing,
+  advanceRedemptionTurn,
+  getGameResults,
 };

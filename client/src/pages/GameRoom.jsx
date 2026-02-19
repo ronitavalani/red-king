@@ -48,6 +48,9 @@ export default function GameRoom() {
     pendingMatchOther,
     setPendingMatchOther,
     handLayouts,
+    redKingCaller,
+    gameResults,
+    setGameResults,
   } = useSocket();
 
   // Build per-player highlight maps: { [playerId]: { [index]: type } }
@@ -72,7 +75,9 @@ export default function GameRoom() {
 
   const isMyTurn = playerInfo && currentTurn === playerInfo.id;
   const hasDrawn = drawnCard !== null;
-  const canCallMatch = gamePhase === 'play' && topDiscard && !matchMode && !activeRule;
+  const isPlayable = gamePhase === 'play' || gamePhase === 'redemption';
+  const isCallerProtected = redKingCaller && redKingCaller.callerId === playerInfo?.id && gamePhase === 'redemption';
+  const canCallMatch = isPlayable && topDiscard && !matchMode && !activeRule && !isCallerProtected;
 
   useEffect(() => {
     if (roomState === 'waiting') navigate('/waiting-room');
@@ -179,6 +184,11 @@ export default function GameRoom() {
     socket.emit('end-game', { roomCode });
   }
 
+  function handleReturnToLobby() {
+    setGameResults(null);
+    socket.emit('end-game', { roomCode });
+  }
+
   function handleDrawCard() {
     if (!isMyTurn || hasDrawn) return;
     socket.emit('draw-card');
@@ -194,6 +204,10 @@ export default function GameRoom() {
 
   function handleSkipRule() {
     socket.emit('skip-rule');
+  }
+
+  function handleCallRedKing() {
+    socket.emit('call-red-king');
   }
 
   // Rule: peek own (7/8)
@@ -279,9 +293,17 @@ export default function GameRoom() {
     return layout.map((hasCard, i) => hasCard ? i : -1).filter((i) => i !== -1);
   }
 
+  // Check if an opponent is protected (Red King caller during redemption)
+  function isOppProtected(oppId) {
+    return gamePhase === 'redemption' && redKingCaller && redKingCaller.callerId === oppId;
+  }
+
   // Determine what click handler to use for cards based on current state
   function getMyCardClickHandler() {
-    if (gamePhase !== 'play') return undefined;
+    if (!isPlayable) return undefined;
+
+    // Caller's hand is locked during redemption
+    if (isCallerProtected) return undefined;
 
     // Match mode: selecting a card to match or give
     if (matchMode === 'select-target') {
@@ -320,7 +342,10 @@ export default function GameRoom() {
   }
 
   function getOpponentCardClickHandler(oppId) {
-    if (gamePhase !== 'play') return undefined;
+    if (!isPlayable) return undefined;
+
+    // Protected opponent's cards can't be interacted with
+    if (isOppProtected(oppId)) return undefined;
 
     // Match mode: selecting opponent card to match
     if (matchMode === 'select-target') {
@@ -353,7 +378,8 @@ export default function GameRoom() {
   }
 
   function getMySelectableIndices() {
-    if (gamePhase !== 'play') return undefined;
+    if (!isPlayable) return undefined;
+    if (isCallerProtected) return undefined;
     const indices = myNonNullIndices();
     if (matchMode === 'select-target' || matchMode === 'give-card') return indices;
     if (isMyTurn && hasDrawn && !activeRule) return indices;
@@ -364,7 +390,8 @@ export default function GameRoom() {
   }
 
   function getOpponentSelectableIndices(oppId) {
-    if (gamePhase !== 'play') return undefined;
+    if (!isPlayable) return undefined;
+    if (isOppProtected(oppId)) return undefined;
     const indices = oppNonNullIndices(oppId);
     if (matchMode === 'select-target') return indices;
     if (!isMyTurn) return undefined;
@@ -397,10 +424,19 @@ export default function GameRoom() {
       return 'Peek at your bottom cards before play begins';
     }
 
-    if (gamePhase === 'play') {
+    if (gamePhase === 'reveal') {
+      return 'Cards revealed!';
+    }
+
+    if (isPlayable) {
       // Match mode instructions (can happen any time, not just your turn)
       if (matchMode === 'select-target') return 'Pick a card to match against the discard pile';
       if (matchMode === 'give-card') return 'Pick one of YOUR cards to give to the other player';
+
+      // Redemption-specific instructions
+      if (gamePhase === 'redemption' && isCallerProtected) {
+        return 'Your cards are locked. Waiting for redemption round...';
+      }
 
       if (!isMyTurn) return `${getTurnPlayerName()} turn`;
 
@@ -430,6 +466,25 @@ export default function GameRoom() {
     return '';
   }
 
+  // Determine the phase indicator for the banner
+  function getBannerIndicator() {
+    if (gamePhase === 'redemption') return 'REDEMPTION';
+    if (matchMode) return 'MATCH';
+    if (isMyTurn && isPlayable) return 'YOUR TURN';
+    return null;
+  }
+
+  function getBannerClass() {
+    const classes = ['instruction-banner'];
+    if (isMyTurn && isPlayable) classes.push('your-turn');
+    if (matchMode) classes.push('match-mode');
+    if (gamePhase === 'redemption') classes.push('redemption-mode');
+    return classes.join(' ');
+  }
+
+  // Can the player call Red King right now?
+  const canCallRedKing = gamePhase === 'play' && isMyTurn && !hasDrawn && !activeRule && !matchMode;
+
   if (!roomCode) return null;
 
   return (
@@ -447,10 +502,13 @@ export default function GameRoom() {
       <div className="game-room-content">
         <div className="game-area">
           {/* Instruction banner */}
-          {gamePhase && (
-            <div className={`instruction-banner ${isMyTurn ? 'your-turn' : ''} ${matchMode ? 'match-mode' : ''}`}>
-              {matchMode && <span className="turn-indicator match-indicator">MATCH</span>}
-              {!matchMode && isMyTurn && gamePhase === 'play' && <span className="turn-indicator">YOUR TURN</span>}
+          {gamePhase && gamePhase !== 'reveal' && (
+            <div className={getBannerClass()}>
+              {getBannerIndicator() && (
+                <span className={`turn-indicator ${getBannerIndicator() === 'MATCH' ? 'match-indicator' : ''} ${getBannerIndicator() === 'REDEMPTION' ? 'redemption-indicator' : ''}`}>
+                  {getBannerIndicator()}
+                </span>
+              )}
               <span className="instruction-text">{getInstructionText()}</span>
             </div>
           )}
@@ -458,10 +516,11 @@ export default function GameRoom() {
           <div className="table-center">
             <div className="opponents-area">
               {opponents.map((opp) => (
-                <div key={opp.id} className={`opponent-hand ${currentTurn === opp.id ? 'active-turn' : ''}`}>
+                <div key={opp.id} className={`opponent-hand ${currentTurn === opp.id ? 'active-turn' : ''} ${isOppProtected(opp.id) ? 'protected' : ''}`}>
                   <span className="opponent-name">
                     {opp.name}
                     {currentTurn === opp.id && <span className="turn-dot" />}
+                    {isOppProtected(opp.id) && <span className="protected-badge">locked</span>}
                   </span>
                   <div className="opponent-cards">
                     <CardGrid
@@ -484,7 +543,7 @@ export default function GameRoom() {
               <DrawPile
                 count={deckCount}
                 onClick={handleDrawCard}
-                canDraw={isMyTurn && !hasDrawn && gamePhase === 'play' && !activeRule}
+                canDraw={isMyTurn && !hasDrawn && isPlayable && !activeRule && !isCallerProtected}
               />
               <DiscardPile
                 topCard={topDiscard}
@@ -492,6 +551,16 @@ export default function GameRoom() {
                 canMatch={canCallMatch}
               />
             </div>
+
+            {/* Call Red King button */}
+            {canCallRedKing && (
+              <div className="call-red-king-area">
+                <button className="btn btn-red-king" onClick={handleCallRedKing}>
+                  Call Red King
+                </button>
+                <span className="red-king-hint">Declare you have the lowest total</span>
+              </div>
+            )}
 
             {/* Drawn card display */}
             {isMyTurn && hasDrawn && !activeRule && (
@@ -636,8 +705,60 @@ export default function GameRoom() {
             </div>
           )}
 
+          {/* Game Results overlay */}
+          {gameResults && (
+            <div className="game-results-overlay">
+              <div className="game-results-content">
+                <h2 className="game-results-title">Game Over</h2>
+                <p className="game-results-subtitle">
+                  {gameResults.callerName} called Red King!
+                </p>
+
+                <div className="results-players">
+                  {gameResults.results.map((r) => (
+                    <div
+                      key={r.id}
+                      className={`result-player ${r.id === gameResults.winnerId ? 'winner' : ''} ${r.isCaller ? 'caller' : ''}`}
+                    >
+                      <div className="result-header">
+                        <span className="result-name">
+                          {r.name}
+                          {r.isCaller && <span className="result-caller-badge">Caller</span>}
+                          {r.id === gameResults.winnerId && <span className="result-winner-badge">Winner</span>}
+                        </span>
+                        <span className="result-score">{r.score} pts</span>
+                      </div>
+                      <div className="result-cards">
+                        {r.hand.map((card, i) => (
+                          <Card key={i} card={card} faceUp={true} size="small" />
+                        ))}
+                        {r.hand.length === 0 && <span className="result-no-cards">No cards</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="result-winner-text">
+                  {gameResults.winnerName} wins!
+                  {gameResults.winnerId !== gameResults.callerId &&
+                    gameResults.results.find((r) => r.id === gameResults.callerId)?.score ===
+                    gameResults.results.find((r) => r.id === gameResults.winnerId)?.score &&
+                    ' (Caller loses ties)'
+                  }
+                </div>
+
+                <button className="btn btn-primary" onClick={handleReturnToLobby}>
+                  Return to Lobby
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="my-hand-area">
-            <span className="my-hand-label">Your Cards</span>
+            <span className="my-hand-label">
+              Your Cards
+              {isCallerProtected && <span className="protected-badge">locked</span>}
+            </span>
             {myCards && (
               <CardGrid
                 cards={myCards}
@@ -672,7 +793,7 @@ export default function GameRoom() {
           )}
 
           {/* Action log */}
-          {gamePhase === 'play' && actionLog.length > 0 && (
+          {isPlayable && actionLog.length > 0 && (
             <div className="action-log">
               <h4 className="action-log-title">Activity</h4>
               <div className="action-log-entries">
@@ -685,9 +806,11 @@ export default function GameRoom() {
             </div>
           )}
 
-          <button className="btn btn-danger" onClick={handleEndGame}>
-            End Game
-          </button>
+          {!gameResults && (
+            <button className="btn btn-danger" onClick={handleEndGame}>
+              End Game
+            </button>
+          )}
         </div>
       </div>
 

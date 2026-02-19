@@ -9,3 +9,9 @@
   display: flex;
   gap: 8px;
 }
+
+.card-grid-overflow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}

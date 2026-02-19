@@ -37,6 +37,10 @@ export function SocketProvider({ children }) {
   const [handLayouts, setHandLayouts] = useState({}); // { [playerId]: boolean[] }
   const matchResultTimerRef = useRef(null);
 
+  // Red King state
+  const [redKingCaller, setRedKingCaller] = useState(null); // { callerId, callerName }
+  const [gameResults, setGameResults] = useState(null);
+
   const addLog = useCallback((entry) => {
     setActionLog((prev) => [...prev.slice(-19), entry]);
   }, []);
@@ -117,6 +121,8 @@ export function SocketProvider({ children }) {
       setMatchMode(null);
       setPendingMatchOther(null);
       setHandLayouts({});
+      setRedKingCaller(null);
+      setGameResults(null);
     }
 
     function onYouLeft() {
@@ -227,6 +233,14 @@ export function SocketProvider({ children }) {
       setHandLayouts(data.layouts);
     }
 
+    function onRedKingCalled(data) {
+      setRedKingCaller({ callerId: data.callerId, callerName: data.callerName });
+    }
+
+    function onGameResults(data) {
+      setGameResults(data);
+    }
+
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('room-created', onRoomCreated);
@@ -252,6 +266,8 @@ export function SocketProvider({ children }) {
     socket.on('cards-highlighted', onCardsHighlighted);
     socket.on('match-result', onMatchResult);
     socket.on('hand-layouts-updated', onHandLayoutsUpdated);
+    socket.on('red-king-called', onRedKingCalled);
+    socket.on('game-results', onGameResults);
 
     return () => {
       socket.off('connect', onConnect);
@@ -279,6 +295,8 @@ export function SocketProvider({ children }) {
       socket.off('cards-highlighted', onCardsHighlighted);
       socket.off('match-result', onMatchResult);
       socket.off('hand-layouts-updated', onHandLayoutsUpdated);
+      socket.off('red-king-called', onRedKingCalled);
+      socket.off('game-results', onGameResults);
     };
   }, [addLog]);
 
@@ -311,6 +329,8 @@ export function SocketProvider({ children }) {
     setMatchMode(null);
     setPendingMatchOther(null);
     setHandLayouts({});
+    setRedKingCaller(null);
+    setGameResults(null);
     if (matchResultTimerRef.current) {
       clearTimeout(matchResultTimerRef.current);
       matchResultTimerRef.current = null;
@@ -352,6 +372,9 @@ export function SocketProvider({ children }) {
     pendingMatchOther,
     setPendingMatchOther,
     handLayouts,
+    redKingCaller,
+    gameResults,
+    setGameResults,
   };
 
   return (

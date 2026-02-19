@@ -405,3 +405,185 @@
   font-size: 0.8rem;
   font-style: italic;
 }
+
+/* Call Red King button area */
+.call-red-king-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.btn-red-king {
+  background: linear-gradient(135deg, #8b0000, #c0392b);
+  color: #fff;
+  border: 1px solid #e74c3c;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: var(--font-display);
+  letter-spacing: 0.1em;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.btn-red-king:hover {
+  background: linear-gradient(135deg, #a00000, #e74c3c);
+  box-shadow: 0 0 12px rgba(231, 76, 60, 0.4);
+}
+
+.red-king-hint {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-style: italic;
+}
+
+/* Redemption mode banner */
+.instruction-banner.redemption-mode {
+  border-color: #e74c3c;
+  background: rgba(139, 0, 0, 0.12);
+}
+
+.redemption-indicator {
+  background: #8b0000 !important;
+  color: #fff !important;
+}
+
+/* Protected opponent hand */
+.opponent-hand.protected {
+  border-color: rgba(139, 0, 0, 0.4);
+  background: rgba(139, 0, 0, 0.06);
+  opacity: 0.7;
+}
+
+.protected-badge {
+  font-size: 0.65rem;
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.12);
+  padding: 0.1rem 0.45rem;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+/* Game results overlay */
+.game-results-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.game-results-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 2rem 2.5rem;
+  background: var(--bg-secondary);
+  border: 2px solid var(--accent-gold);
+  border-radius: 16px;
+  min-width: 340px;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.game-results-title {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  color: var(--accent-gold);
+  letter-spacing: 0.12em;
+}
+
+.game-results-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin-top: -0.75rem;
+}
+
+/* Results player list */
+.results-players {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.result-player {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+.result-player.winner {
+  border-color: var(--accent-gold);
+  background: rgba(212, 168, 75, 0.1);
+}
+
+.result-player.caller {
+  border-left: 3px solid #e74c3c;
+}
+
+.result-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.result-name {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.result-caller-badge {
+  font-size: 0.65rem;
+  color: #e74c3c;
+  background: rgba(231, 76, 60, 0.12);
+  padding: 0.1rem 0.45rem;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.result-winner-badge {
+  font-size: 0.65rem;
+  color: var(--accent-gold);
+  background: rgba(212, 168, 75, 0.15);
+  padding: 0.1rem 0.45rem;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.result-score {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.result-cards {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.result-no-cards {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-style: italic;
+}
+
+.result-winner-text {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--accent-gold);
+  text-align: center;
+  letter-spacing: 0.08em;
+}

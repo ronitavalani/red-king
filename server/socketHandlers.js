@@ -22,6 +22,9 @@ const {
   callMatchOther,
   giveCardAfterMatch,
   getHandLayouts,
+  callRedKing,
+  advanceRedemptionTurn,
+  getGameResults,
 } = require('./roomManager');
 
 function getPlayerName(room, playerId) {
@@ -53,6 +56,35 @@ function emitTurnState(io, room) {
     deckCount: room.gameState.deck.length,
     topDiscard,
   });
+}
+
+// Check if the phase allows normal gameplay actions (draw, keep, discard, rules, match)
+function isPlayablePhase(room) {
+  return room.gameState.phase === 'play' || room.gameState.phase === 'redemption';
+}
+
+// Check if a player's cards are protected (Red King caller during redemption)
+function isProtectedPlayer(room, playerId) {
+  return room.gameState.phase === 'redemption' && room.gameState.redKingCaller === playerId;
+}
+
+// Advance turn and emit state, handling both play and redemption phases
+function advanceAndEmit(io, room) {
+  if (room.gameState.phase === 'redemption') {
+    const result = advanceRedemptionTurn(room.code);
+    if (!result) return;
+    if (result.phase === 'reveal') {
+      // Redemption is over - calculate and emit game results
+      const gameResults = getGameResults(room.code);
+      io.to(room.code).emit('game-results', gameResults);
+      io.to(room.code).emit('phase-changed', { phase: 'reveal' });
+    } else {
+      emitTurnState(io, room);
+    }
+  } else {
+    advanceTurn(room.code);
+    emitTurnState(io, room);
+  }
 }
 
 function registerSocketHandlers(io, socket) {
@@ -130,9 +162,41 @@ function registerSocketHandlers(io, socket) {
 
   // --- GAMEPLAY EVENTS ---
 
-  socket.on('draw-card', () => {
+  // Call Red King: declare you have the lowest score
+  socket.on('call-red-king', () => {
     const room = getRoomBySocketId(socket.id);
     if (!room || !room.gameState || room.gameState.phase !== 'play') return;
+
+    const result = callRedKing(room.code, socket.id);
+    if (!result) return;
+
+    const callerName = getPlayerName(room, socket.id);
+
+    io.to(room.code).emit('red-king-called', {
+      callerId: socket.id,
+      callerName,
+    });
+
+    io.to(room.code).emit('phase-changed', {
+      phase: 'redemption',
+      currentTurn: result.currentTurn,
+      topDiscard: getTopDiscard(room.code),
+    });
+
+    io.to(room.code).emit('action-log', {
+      playerId: socket.id,
+      playerName: callerName,
+      message: `${callerName} called RED KING! Redemption round begins.`,
+    });
+
+    // Emit hand layouts so everyone sees the caller's cards are protected
+    const layouts = getHandLayouts(room.code);
+    io.to(room.code).emit('hand-layouts-updated', { layouts });
+  });
+
+  socket.on('draw-card', () => {
+    const room = getRoomBySocketId(socket.id);
+    if (!room || !room.gameState || !isPlayablePhase(room)) return;
 
     const card = drawCard(room.code, socket.id);
     if (!card) return;
@@ -177,8 +241,7 @@ function registerSocketHandlers(io, socket) {
       type: 'swap',
     });
 
-    advanceTurn(room.code);
-    emitTurnState(io, room);
+    advanceAndEmit(io, room);
   });
 
   socket.on('discard-card', () => {
@@ -212,8 +275,7 @@ function registerSocketHandlers(io, socket) {
         card,
         action: 'discarded',
       });
-      advanceTurn(room.code);
-      emitTurnState(io, room);
+      advanceAndEmit(io, room);
     }
   });
 
@@ -228,8 +290,7 @@ function registerSocketHandlers(io, socket) {
       message: `${getPlayerName(room, socket.id)} skipped using the card rule`,
     });
 
-    advanceTurn(room.code);
-    emitTurnState(io, room);
+    advanceAndEmit(io, room);
   });
 
   // 7 or 8: Peek at own card (turn advances when player finishes peeking)
@@ -253,6 +314,8 @@ function registerSocketHandlers(io, socket) {
   socket.on('use-peek-other', ({ targetPlayerId, handIndex }) => {
     const room = getRoomBySocketId(socket.id);
     if (!room || !room.gameState) return;
+    // Block peeking at protected player's cards
+    if (isProtectedPlayer(room, targetPlayerId)) return;
 
     const card = peekOtherCard(room.code, targetPlayerId, handIndex);
     if (!card) return;
@@ -277,14 +340,15 @@ function registerSocketHandlers(io, socket) {
       message: `${getPlayerName(room, socket.id)} finished peeking`,
     });
 
-    advanceTurn(room.code);
-    emitTurnState(io, room);
+    advanceAndEmit(io, room);
   });
 
   // J or Q: Blind switch
   socket.on('use-blind-switch', ({ playerAId, indexA, playerBId, indexB }) => {
     const room = getRoomBySocketId(socket.id);
     if (!room || !room.gameState) return;
+    // Block switching protected player's cards
+    if (isProtectedPlayer(room, playerAId) || isProtectedPlayer(room, playerBId)) return;
 
     const result = blindSwitch(room.code, playerAId, indexA, playerBId, indexB);
     if (!result) return;
@@ -316,14 +380,15 @@ function registerSocketHandlers(io, socket) {
       type: 'switch',
     });
 
-    advanceTurn(room.code);
-    emitTurnState(io, room);
+    advanceAndEmit(io, room);
   });
 
   // Black King: peek at two cards then optionally blind switch
   socket.on('use-black-king-peek', ({ target1PlayerId, index1, target2PlayerId, index2 }) => {
     const room = getRoomBySocketId(socket.id);
     if (!room || !room.gameState) return;
+    // Block peeking at protected player's cards
+    if (isProtectedPlayer(room, target1PlayerId) || isProtectedPlayer(room, target2PlayerId)) return;
 
     const result = blackKingPeek(room.code, target1PlayerId, index1, target2PlayerId, index2);
     if (!result) return;
@@ -348,6 +413,8 @@ function registerSocketHandlers(io, socket) {
   socket.on('use-black-king-switch', ({ playerAId, indexA, playerBId, indexB }) => {
     const room = getRoomBySocketId(socket.id);
     if (!room || !room.gameState) return;
+    // Block switching protected player's cards
+    if (isProtectedPlayer(room, playerAId) || isProtectedPlayer(room, playerBId)) return;
 
     const result = blindSwitch(room.code, playerAId, indexA, playerBId, indexB);
     if (!result) return;
@@ -378,8 +445,7 @@ function registerSocketHandlers(io, socket) {
       type: 'switch',
     });
 
-    advanceTurn(room.code);
-    emitTurnState(io, room);
+    advanceAndEmit(io, room);
   });
 
   // Black King: skip the switch after peeking
@@ -393,8 +459,7 @@ function registerSocketHandlers(io, socket) {
       message: `${getPlayerName(room, socket.id)} chose not to switch any cards`,
     });
 
-    advanceTurn(room.code);
-    emitTurnState(io, room);
+    advanceAndEmit(io, room);
   });
 
   // --- MATCH CALLING EVENTS ---
@@ -408,7 +473,9 @@ function registerSocketHandlers(io, socket) {
   // Call match on your own card
   socket.on('call-match-own', ({ handIndex }) => {
     const room = getRoomBySocketId(socket.id);
-    if (!room || !room.gameState || room.gameState.phase !== 'play') return;
+    if (!room || !room.gameState || !isPlayablePhase(room)) return;
+    // Block if caller's cards are protected (caller can't modify own hand during redemption)
+    if (isProtectedPlayer(room, socket.id)) return;
 
     const result = callMatchOwn(room.code, socket.id, handIndex);
     if (!result) return;
@@ -479,7 +546,10 @@ function registerSocketHandlers(io, socket) {
   // Call match on another player's card
   socket.on('call-match-other', ({ targetPlayerId, handIndex }) => {
     const room = getRoomBySocketId(socket.id);
-    if (!room || !room.gameState || room.gameState.phase !== 'play') return;
+    if (!room || !room.gameState || !isPlayablePhase(room)) return;
+    // Block if targeting protected player or if caller is protected
+    if (isProtectedPlayer(room, targetPlayerId)) return;
+    if (isProtectedPlayer(room, socket.id)) return;
 
     const result = callMatchOther(room.code, socket.id, targetPlayerId, handIndex);
     if (!result) return;
@@ -535,6 +605,8 @@ function registerSocketHandlers(io, socket) {
   socket.on('give-card-after-match', ({ callerHandIndex, targetPlayerId, targetIndex }) => {
     const room = getRoomBySocketId(socket.id);
     if (!room || !room.gameState) return;
+    // Block giving cards to protected player
+    if (isProtectedPlayer(room, targetPlayerId)) return;
 
     const result = giveCardAfterMatch(room.code, socket.id, callerHandIndex, targetPlayerId, targetIndex);
     if (!result) return;
