@@ -9,7 +9,7 @@
  * giving every room/player a unique ID via the `uid()` counter helper.
  */
 
-const rm = require('../roomManager');
+const rm = require('../server/roomManager');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

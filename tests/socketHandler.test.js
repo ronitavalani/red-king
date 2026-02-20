@@ -13,8 +13,8 @@
 const { createServer } = require('node:http');
 const { Server } = require('socket.io');
 const { io: ClientIO } = require('socket.io-client');
-const { registerSocketHandlers } = require('../socketHandlers');
-const rm = require('../roomManager');
+const { registerSocketHandlers } = require('../server/socketHandlers');
+const rm = require('../server/roomManager');
 
 // ─── Server Lifecycle ─────────────────────────────────────────────────────────
 
