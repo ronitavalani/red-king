@@ -86,6 +86,38 @@ function joinRoom(code, socketId, playerName) {
   return { success: true, room };
 }
 
+function generateBotId() {
+  return 'bot-' + Math.random().toString(36).slice(2, 10);
+}
+
+function addBotPlayer(roomCode, botName, difficulty = 'medium') {
+  const room = rooms.get(roomCode);
+  if (!room) return { success: false, error: 'Room not found' };
+  if (room.state === 'playing') return { success: false, error: 'Game is already in progress' };
+  if (room.players.length >= 8) return { success: false, error: 'Room is full' };
+  if (room.players.some((p) => p.name === botName))
+    return { success: false, error: 'Name already taken in this room' };
+
+  const botId = generateBotId();
+  const bot = { id: botId, name: botName, isHost: false, isCpu: true, difficulty };
+  room.players.push(bot);
+  // Bots are NOT added to playerRoomMap — no socket disconnect needed.
+  return { success: true, room, bot };
+}
+
+function removeBotPlayer(roomCode, botId) {
+  const room = rooms.get(roomCode);
+  if (!room) return false;
+  const idx = room.players.findIndex((p) => p.id === botId && p.isCpu);
+  if (idx === -1) return false;
+  room.players.splice(idx, 1);
+  return true;
+}
+
+function getAllRooms() {
+  return rooms;
+}
+
 function leaveRoom(socketId) {
   const code = playerRoomMap.get(socketId);
   if (!code) return { room: null, wasHost: false, isEmpty: true };
@@ -589,6 +621,9 @@ module.exports = {
   createRoom,
   joinRoom,
   leaveRoom,
+  addBotPlayer,
+  removeBotPlayer,
+  getAllRooms,
   getRoomByCode,
   getRoomBySocketId,
   setRoomState,

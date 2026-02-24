@@ -15,11 +15,12 @@ export default function PlayerList({ players }) {
             key={player.id}
             className={`player-item ${player.isHost ? 'is-host' : ''} ${
               playerInfo && player.id === playerInfo.id ? 'is-you' : ''
-            }`}
+            } ${player.isCpu ? 'is-cpu' : ''}`}
           >
             <span className="player-name">{player.name}</span>
             <span className="player-badges">
               {player.isHost && <span className="badge host-badge">Host</span>}
+              {player.isCpu && <span className="badge cpu-badge">CPU</span>}
               {playerInfo && player.id === playerInfo.id && (
                 <span className="badge you-badge">You</span>
               )}

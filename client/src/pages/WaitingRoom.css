@@ -49,3 +49,27 @@
   font-style: italic;
   padding: 0.5rem 0;
 }
+
+.cpu-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.cpu-controls-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.btn-sm {
+  font-size: 0.85rem;
+  padding: 0.4rem 0.9rem;
+}
+
+.cpu-count-hint {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin: 0;
+}
