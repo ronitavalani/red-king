@@ -25,7 +25,17 @@ const {
   callRedKing,
   advanceRedemptionTurn,
   getGameResults,
+  addBotPlayer,
+  getAllRooms,
 } = require('./roomManager');
+
+const {
+  executeBotPeekPhase,
+  scheduleBotTurn,
+  checkBotMatches,
+  removeBot,
+  invalidateBotMemoryIfNeeded,
+} = require('./cpuPlayer');
 
 function getPlayerName(room, playerId) {
   const p = room.players.find((pl) => pl.id === playerId);
@@ -45,6 +55,7 @@ function checkPeekComplete(io, room) {
       currentTurn,
       topDiscard: null,
     });
+    scheduleBotTurn(io, room, 2000);
   }
 }
 
@@ -117,6 +128,24 @@ function registerSocketHandlers(io, socket) {
     });
   });
 
+  socket.on('add-cpu-player', ({ difficulty = 'medium' } = {}) => {
+    const room = getRoomBySocketId(socket.id);
+    if (!room || room.hostId !== socket.id) return;
+    if (room.state === 'playing') {
+      socket.emit('add-cpu-error', { message: 'Game already in progress' });
+      return;
+    }
+    const count = room.players.filter((p) => p.isCpu).length;
+    const diff = ['easy', 'medium', 'hard'].includes(difficulty) ? difficulty : 'medium';
+    const name = `CPU ${count + 1} (${diff[0].toUpperCase() + diff.slice(1)})`;
+    const result = addBotPlayer(room.code, name, diff);
+    if (!result.success) {
+      socket.emit('add-cpu-error', { message: result.error });
+      return;
+    }
+    io.to(room.code).emit('player-list-updated', { players: room.players });
+  });
+
   socket.on('start-game', () => {
     const room = getRoomBySocketId(socket.id);
     if (!room || room.hostId !== socket.id) return;
@@ -125,26 +154,40 @@ function registerSocketHandlers(io, socket) {
     const updatedRoom = dealCards(room.code);
     if (!updatedRoom) return;
 
-    // Send each player ONLY their own cards (private)
+    // Send each player ONLY their own cards (private); bots get no socket emit
     for (const player of updatedRoom.players) {
-      io.to(player.id).emit('cards-dealt', {
-        myCards: updatedRoom.gameState.hands[player.id],
-        phase: updatedRoom.gameState.phase,
-        deckCount: updatedRoom.gameState.deck.length,
-        opponents: updatedRoom.players
-          .filter((p) => p.id !== player.id)
-          .map((p) => ({ id: p.id, name: p.name, cardCount: 4 })),
-      });
+      if (!player.isCpu) {
+        io.to(player.id).emit('cards-dealt', {
+          myCards: updatedRoom.gameState.hands[player.id],
+          phase: updatedRoom.gameState.phase,
+          deckCount: updatedRoom.gameState.deck.length,
+          opponents: updatedRoom.players
+            .filter((p) => p.id !== player.id)
+            .map((p) => ({ id: p.id, name: p.name, cardCount: 4 })),
+        });
+      }
+    }
+
+    // Auto-complete peek phase for all CPU players
+    for (const player of updatedRoom.players) {
+      if (player.isCpu) {
+        executeBotPeekPhase(io, updatedRoom, player.id);
+      }
     }
 
     io.to(updatedRoom.code).emit('game-started', {
       phase: updatedRoom.gameState.phase,
     });
+
+    checkPeekComplete(io, updatedRoom);
   });
 
   socket.on('end-game', () => {
     const room = getRoomBySocketId(socket.id);
     if (!room) return;
+    for (const p of room.players) {
+      if (p.isCpu) removeBot(p.id);
+    }
     clearGameState(room.code);
     setRoomState(room.code, 'waiting');
     io.to(room.code).emit('game-ended', { players: room.players });
@@ -241,7 +284,9 @@ function registerSocketHandlers(io, socket) {
       type: 'swap',
     });
 
+    checkBotMatches(io, room);
     advanceAndEmit(io, room);
+    scheduleBotTurn(io, room);
   });
 
   socket.on('discard-card', () => {
@@ -267,6 +312,7 @@ function registerSocketHandlers(io, socket) {
         card,
         action: `using ${ruleType} rule`,
       });
+      checkBotMatches(io, room);
     } else {
       // No rule, just discard and advance turn
       io.to(room.code).emit('card-discarded', {
@@ -275,7 +321,9 @@ function registerSocketHandlers(io, socket) {
         card,
         action: 'discarded',
       });
+      checkBotMatches(io, room);
       advanceAndEmit(io, room);
+      scheduleBotTurn(io, room);
     }
   });
 
@@ -291,6 +339,7 @@ function registerSocketHandlers(io, socket) {
     });
 
     advanceAndEmit(io, room);
+    scheduleBotTurn(io, room);
   });
 
   // 7 or 8: Peek at own card (turn advances when player finishes peeking)
@@ -341,6 +390,7 @@ function registerSocketHandlers(io, socket) {
     });
 
     advanceAndEmit(io, room);
+    scheduleBotTurn(io, room);
   });
 
   // J or Q: Blind switch
@@ -380,7 +430,10 @@ function registerSocketHandlers(io, socket) {
       type: 'switch',
     });
 
+    invalidateBotMemoryIfNeeded(playerAId, indexA, room);
+    invalidateBotMemoryIfNeeded(playerBId, indexB, room);
     advanceAndEmit(io, room);
+    scheduleBotTurn(io, room);
   });
 
   // Black King: peek at two cards then optionally blind switch
@@ -445,7 +498,10 @@ function registerSocketHandlers(io, socket) {
       type: 'switch',
     });
 
+    invalidateBotMemoryIfNeeded(playerAId, indexA, room);
+    invalidateBotMemoryIfNeeded(playerBId, indexB, room);
     advanceAndEmit(io, room);
+    scheduleBotTurn(io, room);
   });
 
   // Black King: skip the switch after peeking
@@ -460,6 +516,7 @@ function registerSocketHandlers(io, socket) {
     });
 
     advanceAndEmit(io, room);
+    scheduleBotTurn(io, room);
   });
 
   // --- MATCH CALLING EVENTS ---
@@ -510,6 +567,8 @@ function registerSocketHandlers(io, socket) {
         cards: [{ playerId: socket.id, index: handIndex }],
         type: 'match',
       });
+
+      checkBotMatches(io, room);
     } else {
       // Wrong - penalty card added
       socket.emit('hand-updated', { myCards: room.gameState.hands[socket.id] });
@@ -642,6 +701,8 @@ function registerSocketHandlers(io, socket) {
       type: 'match',
     });
 
+    checkBotMatches(io, room);
+
     io.to(room.code).emit('turn-update', {
       currentTurn: getCurrentTurnPlayer(room.code),
       deckCount: room.gameState.deck.length,
@@ -657,6 +718,19 @@ function registerSocketHandlers(io, socket) {
     const { room, wasHost, isEmpty } = leaveRoom(socket.id);
     if (!isEmpty && room) {
       socket.leave(room.code);
+
+      // If no humans remain, clean up the room entirely
+      const humanPlayers = room.players.filter((p) => !p.isCpu);
+      if (humanPlayers.length === 0) {
+        for (const p of room.players) {
+          if (p.isCpu) removeBot(p.id);
+        }
+        getAllRooms().delete(room.code);
+        io.to(room.code).emit('game-ended', { players: [] });
+        socket.emit('you-left', {});
+        return;
+      }
+
       io.to(room.code).emit('player-list-updated', { players: room.players });
       if (wasHost) {
         io.to(room.code).emit('host-changed', { newHostId: room.hostId });
@@ -670,6 +744,17 @@ function registerSocketHandlers(io, socket) {
   socket.on('disconnect', () => {
     const { room, wasHost, isEmpty } = leaveRoom(socket.id);
     if (room && !isEmpty) {
+      // If no humans remain, clean up the room entirely
+      const humanPlayers = room.players.filter((p) => !p.isCpu);
+      if (humanPlayers.length === 0) {
+        for (const p of room.players) {
+          if (p.isCpu) removeBot(p.id);
+        }
+        getAllRooms().delete(room.code);
+        io.to(room.code).emit('game-ended', { players: [] });
+        return;
+      }
+
       io.to(room.code).emit('player-list-updated', { players: room.players });
       if (wasHost) {
         io.to(room.code).emit('host-changed', { newHostId: room.hostId });

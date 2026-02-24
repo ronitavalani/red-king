@@ -62,3 +62,12 @@
   background: rgba(192, 57, 43, 0.2);
   color: var(--accent-red-light);
 }
+
+.cpu-badge {
+  background: rgba(74, 158, 255, 0.2);
+  color: #4a9eff;
+}
+
+.player-item.is-cpu {
+  border-left-color: #4a9eff;
+}
