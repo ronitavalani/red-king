@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { useSocket } from '../context/SocketContext';
 import { socket } from '../socket';
@@ -8,6 +8,10 @@ import DrawPile from '../components/DrawPile';
 import DiscardPile from '../components/DiscardPile';
 import Card from '../components/Card';
 import RulesModal from '../components/RulesModal';
+import Scratchpad from '../components/Scratchpad';
+import SuggestionPanel from '../components/SuggestionPanel';
+import { getCustomBot, computeSuggestion } from '../utils/BotStrategies';
+import { useScratchpad } from '../hooks/useScratchpad';
 import './GameRoom.css';
 
 const RULE_DESCRIPTIONS = {
@@ -53,6 +57,14 @@ export default function GameRoom() {
     setGameResults,
   } = useSocket();
 
+  // ── Custom bot mode (arunia / ront) ──────────────────────────────────────────
+  const isCustomBot = playerInfo?.name === 'arunia' || playerInfo?.name === 'ront';
+  const bot = useMemo(() => getCustomBot(playerInfo?.name), [playerInfo?.name]);
+  const { knownOwnCards, knownOpponentCards, discardHistory, opponentKnowledge, initPeekCards, recordKeep } =
+    useScratchpad(playerInfo, opponents, isCustomBot);
+
+  const [overrideActive, setOverrideActive] = useState(false);
+
   // Build per-player highlight maps: { [playerId]: { [index]: type } }
   const highlightMap = {};
   for (const h of highlightedCards) {
@@ -78,6 +90,34 @@ export default function GameRoom() {
   const isPlayable = gamePhase === 'play' || gamePhase === 'redemption';
   const isCallerProtected = redKingCaller && redKingCaller.callerId === playerInfo?.id && gamePhase === 'redemption';
   const canCallMatch = isPlayable && topDiscard && !matchMode && !activeRule && !isCallerProtected;
+
+  // Reset override when the turn comes back to us
+  useEffect(() => {
+    if (playerInfo && currentTurn === playerInfo.id) {
+      setOverrideActive(false);
+    }
+  }, [currentTurn, playerInfo]);
+
+  // Compute bot suggestion each render (only for custom-bot players on their turn)
+  const suggestion = isCustomBot && bot
+    ? computeSuggestion(bot, {
+        isMyTurn,
+        gamePhase,
+        hasDrawn,
+        drawnCard,
+        drawnCardHasRule,
+        drawnCardRuleType,
+        myCards,
+        knownOwnCards,
+        knownOpponentCards,
+        opponentKnowledge,
+        topDiscard,
+        opponents,
+        activeRule,
+        matchMode,
+        isCallerProtected,
+      })
+    : null;
 
   useEffect(() => {
     if (roomState === 'waiting') navigate('/waiting-room');
@@ -177,6 +217,7 @@ export default function GameRoom() {
   function handleDonePeeking() {
     setIsPeeking(false);
     setHasPeeked(true);
+    if (isCustomBot) initPeekCards(myCards);
     socket.emit('peek-done');
   }
 
@@ -196,6 +237,8 @@ export default function GameRoom() {
 
   function handleKeepCard(handIndex) {
     socket.emit('keep-card', { handIndex });
+    // Record the drawn card as known at this slot for the scratchpad
+    if (isCustomBot && drawnCard) recordKeep(handIndex, drawnCard);
   }
 
   function handleDiscardCard() {
@@ -208,6 +251,45 @@ export default function GameRoom() {
 
   function handleCallRedKing() {
     socket.emit('call-red-king');
+  }
+
+  // Handle custom-bot suggestion acceptance — emits the appropriate socket event
+  function handleSuggestionAccept() {
+    if (!suggestion) return;
+    switch (suggestion.action) {
+      case 'call-red-king':
+        socket.emit('call-red-king');
+        break;
+      case 'draw':
+        socket.emit('draw-card');
+        break;
+      case 'discard':
+      case 'discard-use-rule':
+        socket.emit('discard-card');
+        break;
+      case 'keep':
+        socket.emit('keep-card', { handIndex: suggestion.slotIndex });
+        // We just saw the drawn card — record it as our new known card for that slot
+        if (drawnCard) recordKeep(suggestion.slotIndex, drawnCard);
+        break;
+      case 'peek-own':
+        socket.emit('use-peek-own', { handIndex: suggestion.slotIndex });
+        break;
+      case 'peek-other':
+        socket.emit('use-peek-other', {
+          targetPlayerId: suggestion.targetPlayerId,
+          handIndex: suggestion.targetIndex,
+        });
+        break;
+      case 'skip-rule':
+        socket.emit('skip-rule');
+        break;
+      case 'match-own':
+        socket.emit('call-match-own', { handIndex: suggestion.slotIndex });
+        break;
+      default:
+        break;
+    }
   }
 
   // Rule: peek own (7/8)
@@ -347,31 +429,34 @@ export default function GameRoom() {
     // Protected opponent's cards can't be interacted with
     if (isOppProtected(oppId)) return undefined;
 
+    // Map visual index (reversed for POV) back to actual card index
+    const mapIndex = (visualIndex) => 3 - visualIndex;
+
     // Match mode: selecting opponent card to match
     if (matchMode === 'select-target') {
-      return (index) => handleMatchCardSelect(oppId, index);
+      return (index) => handleMatchCardSelect(oppId, mapIndex(index));
     }
 
     if (!isMyTurn) return undefined;
 
     // Peek other rule
     if (activeRule === 'peek-other' && ruleStep === 'executing') {
-      return (index) => handlePeekOtherSelect(oppId, index);
+      return (index) => handlePeekOtherSelect(oppId, mapIndex(index));
     }
 
     // Blind switch
     if (activeRule === 'blind-switch' && ruleStep === 'executing') {
-      return (index) => handleBlindSwitchSelect(oppId, index);
+      return (index) => handleBlindSwitchSelect(oppId, mapIndex(index));
     }
 
     // Black king peek select
     if (activeRule === 'black-king' && blackKingPhase === 'peek-select') {
-      return (index) => handleBlackKingPeekSelect(oppId, index);
+      return (index) => handleBlackKingPeekSelect(oppId, mapIndex(index));
     }
 
     // Black king switch select
     if (activeRule === 'black-king' && blackKingPhase === 'switch-select') {
-      return (index) => handleBlackKingSwitchSelect(oppId, index);
+      return (index) => handleBlackKingSwitchSelect(oppId, mapIndex(index));
     }
 
     return undefined;
@@ -392,20 +477,24 @@ export default function GameRoom() {
   function getOpponentSelectableIndices(oppId) {
     if (!isPlayable) return undefined;
     if (isOppProtected(oppId)) return undefined;
-    const indices = oppNonNullIndices(oppId);
-    if (matchMode === 'select-target') return indices;
+    const actualIndices = oppNonNullIndices(oppId);
+    // Map actual indices to visual indices (reversed for POV)
+    const visualIndices = actualIndices.map(idx => 3 - idx);
+    if (matchMode === 'select-target') return visualIndices;
     if (!isMyTurn) return undefined;
-    if (activeRule === 'peek-other') return indices;
-    if (activeRule === 'blind-switch') return indices;
-    if (activeRule === 'black-king' && (blackKingPhase === 'peek-select' || blackKingPhase === 'switch-select')) return indices;
+    if (activeRule === 'peek-other') return visualIndices;
+    if (activeRule === 'blind-switch') return visualIndices;
+    if (activeRule === 'black-king' && (blackKingPhase === 'peek-select' || blackKingPhase === 'switch-select')) return visualIndices;
     return undefined;
   }
 
   // Build opponent cards array from layout: true → face-down placeholder, false → null (empty slot)
+  // Reverse for POV style (opponent sees cards from their perspective)
   function getOpponentCards(oppId) {
     const layout = handLayouts[oppId];
-    if (!layout) return Array(4).fill(false); // default: 4 face-down cards
-    return layout.map((hasCard) => (hasCard ? false : null));
+    const cards = layout ? layout.map((hasCard) => (hasCard ? false : null)) : Array(4).fill(false);
+    // Reverse order for POV: [0,1,2,3] becomes [3,2,1,0]
+    return [cards[3], cards[2], cards[1], cards[0]];
   }
 
   // Get the turn player's name
@@ -523,14 +612,23 @@ export default function GameRoom() {
                     {isOppProtected(opp.id) && <span className="protected-badge">locked</span>}
                   </span>
                   <div className="opponent-cards">
-                    <CardGrid
-                      cards={getOpponentCards(opp.id)}
-                      isPeeking={false}
-                      size="small"
-                      onCardClick={getOpponentCardClickHandler(opp.id)}
-                      selectableIndices={getOpponentSelectableIndices(opp.id)}
-                      highlightedIndices={highlightMap[opp.id]}
-                    />
+                    {(() => {
+                      // Remap highlight indices from actual to visual for POV display
+                      const oppHighlights = highlightMap[opp.id];
+                      const remappedHighlights = oppHighlights ? Object.fromEntries(
+                        Object.entries(oppHighlights).map(([actualIdx, type]) => [3 - parseInt(actualIdx), type])
+                      ) : undefined;
+                      return (
+                        <CardGrid
+                          cards={getOpponentCards(opp.id)}
+                          isPeeking={false}
+                          size="small"
+                          onCardClick={getOpponentCardClickHandler(opp.id)}
+                          selectableIndices={getOpponentSelectableIndices(opp.id)}
+                          highlightedIndices={remappedHighlights}
+                        />
+                      );
+                    })()}
                   </div>
                   {gamePhase === 'peek' && peekDonePlayers.has(opp.id) && (
                     <span className="peek-done-badge">Ready</span>
@@ -560,6 +658,15 @@ export default function GameRoom() {
                 </button>
                 <span className="red-king-hint">Declare you have the lowest total</span>
               </div>
+            )}
+
+            {/* Custom bot suggestion panel */}
+            {isCustomBot && isMyTurn && !overrideActive && isPlayable && suggestion && (
+              <SuggestionPanel
+                suggestion={suggestion}
+                onAccept={handleSuggestionAccept}
+                onOverride={() => setOverrideActive(true)}
+              />
             )}
 
             {/* Drawn card display */}
@@ -771,7 +878,19 @@ export default function GameRoom() {
           </div>
         </div>
 
-        <div className="game-sidebar">
+        <div className={`game-sidebar${isCustomBot ? ' custom-bot' : ''}`}>
+          {/* Scratchpad — visible during play/redemption for custom-bot players */}
+          {isCustomBot && isPlayable && (
+            <Scratchpad
+              knownOwnCards={knownOwnCards}
+              knownOpponentCards={knownOpponentCards}
+              discardHistory={discardHistory}
+              myCards={myCards}
+              opponents={opponents}
+              handLayouts={handLayouts}
+            />
+          )}
+
           <PlayerList players={players} />
 
           {gamePhase === 'peek' && (
