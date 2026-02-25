@@ -587,3 +587,163 @@
   text-align: center;
   letter-spacing: 0.08em;
 }
+
+/* ── Suggestion panel ──────────────────────────────────────────────────────── */
+.suggestion-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.85rem 1.25rem;
+  background: rgba(212, 168, 75, 0.07);
+  border: 1.5px solid var(--accent-gold);
+  border-radius: 10px;
+  max-width: 380px;
+  width: 100%;
+}
+
+.suggestion-header {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--accent-gold);
+  font-family: var(--font-display);
+}
+
+.suggestion-label {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.suggestion-reasoning {
+  font-size: 0.77rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.suggestion-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.2rem;
+}
+
+/* ── Scratchpad sidebar panel ─────────────────────────────────────────────── */
+.scratchpad {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.75rem;
+}
+
+.scratchpad-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--accent-gold);
+  font-family: var(--font-display);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.35rem;
+}
+
+.scratchpad-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.scratchpad-section-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.scratchpad-opponents-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.scratchpad-opponent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.scratchpad-opponent-name {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+}
+
+.scratchpad-slot-row {
+  display: flex;
+  gap: 4px;
+}
+
+.scratchpad-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 4px;
+  justify-content: start;
+}
+
+.scratchpad-slot {
+  width: 34px;
+  height: 44px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-family: monospace;
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.scratchpad-slot.known {
+  background: var(--bg-card);
+  border-color: rgba(212, 168, 75, 0.4);
+}
+
+.scratchpad-slot.unknown {
+  background: transparent;
+  color: var(--text-secondary);
+  opacity: 0.55;
+}
+
+.scratchpad-slot.empty {
+  background: transparent;
+  border-color: transparent;
+  opacity: 0.2;
+}
+
+.scratchpad-slot.red {
+  color: #e74c3c;
+}
+
+.scratchpad-slot.black {
+  color: var(--text-primary);
+}
+
+.scratchpad-discard-text {
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  word-break: break-all;
+  max-height: 48px;
+  overflow-y: auto;
+}
+
+/* Shrink action log when scratchpad is visible */
+.game-sidebar.custom-bot .action-log-entries {
+  max-height: 120px;
+}
