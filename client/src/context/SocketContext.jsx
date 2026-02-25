@@ -41,6 +41,9 @@ export function SocketProvider({ children }) {
   const [redKingCaller, setRedKingCaller] = useState(null); // { callerId, callerName }
   const [gameResults, setGameResults] = useState(null);
 
+  // Debug state (only populated when VITE_DEBUG=true and server DEBUG=true)
+  const [debugState, setDebugState] = useState(null);
+
   const addLog = useCallback((entry) => {
     setActionLog((prev) => [...prev.slice(-19), entry]);
   }, []);
@@ -123,6 +126,7 @@ export function SocketProvider({ children }) {
       setHandLayouts({});
       setRedKingCaller(null);
       setGameResults(null);
+      setDebugState(null);
     }
 
     function onYouLeft() {
@@ -241,6 +245,10 @@ export function SocketProvider({ children }) {
       setGameResults(data);
     }
 
+    function onDebugState(data) {
+      setDebugState(data);
+    }
+
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('room-created', onRoomCreated);
@@ -268,6 +276,7 @@ export function SocketProvider({ children }) {
     socket.on('hand-layouts-updated', onHandLayoutsUpdated);
     socket.on('red-king-called', onRedKingCalled);
     socket.on('game-results', onGameResults);
+    socket.on('debug-state', onDebugState);
 
     return () => {
       socket.off('connect', onConnect);
@@ -297,6 +306,7 @@ export function SocketProvider({ children }) {
       socket.off('hand-layouts-updated', onHandLayoutsUpdated);
       socket.off('red-king-called', onRedKingCalled);
       socket.off('game-results', onGameResults);
+      socket.off('debug-state', onDebugState);
     };
   }, [addLog]);
 
@@ -331,6 +341,7 @@ export function SocketProvider({ children }) {
     setHandLayouts({});
     setRedKingCaller(null);
     setGameResults(null);
+    setDebugState(null);
     if (matchResultTimerRef.current) {
       clearTimeout(matchResultTimerRef.current);
       matchResultTimerRef.current = null;
@@ -375,6 +386,7 @@ export function SocketProvider({ children }) {
     redKingCaller,
     gameResults,
     setGameResults,
+    debugState,
   };
 
   return (

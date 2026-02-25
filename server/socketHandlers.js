@@ -37,6 +37,27 @@ const {
   invalidateBotMemoryIfNeeded,
 } = require('./cpuPlayer');
 
+function emitDebugState(io, room) {
+  if (process.env.DEBUG !== 'true' || !room?.gameState) return;
+  const hands = {};
+  for (const player of room.players) {
+    hands[player.id] = {
+      name: player.name,
+      isCpu: player.isCpu || false,
+      hand: room.gameState.hands[player.id] || [],
+    };
+  }
+  io.to(room.code).emit('debug-state', {
+    hands,
+    phase: room.gameState.phase,
+    currentTurn: getCurrentTurnPlayer(room.code),
+    deckCount: room.gameState.deck.length,
+    topDiscard: room.gameState.discardPile.length
+      ? room.gameState.discardPile[room.gameState.discardPile.length - 1]
+      : null,
+  });
+}
+
 function getPlayerName(room, playerId) {
   const p = room.players.find((pl) => pl.id === playerId);
   return p ? p.name : 'Unknown';
@@ -67,6 +88,7 @@ function emitTurnState(io, room) {
     deckCount: room.gameState.deck.length,
     topDiscard,
   });
+  emitDebugState(io, room);
 }
 
 // Check if the phase allows normal gameplay actions (draw, keep, discard, rules, match)
@@ -179,6 +201,7 @@ function registerSocketHandlers(io, socket) {
       phase: updatedRoom.gameState.phase,
     });
 
+    emitDebugState(io, updatedRoom);
     checkPeekComplete(io, updatedRoom);
   });
 
@@ -235,6 +258,7 @@ function registerSocketHandlers(io, socket) {
     // Emit hand layouts so everyone sees the caller's cards are protected
     const layouts = getHandLayouts(room.code);
     io.to(room.code).emit('hand-layouts-updated', { layouts });
+    emitDebugState(io, room);
   });
 
   socket.on('draw-card', () => {
@@ -569,6 +593,7 @@ function registerSocketHandlers(io, socket) {
       });
 
       checkBotMatches(io, room);
+      emitDebugState(io, room);
     } else {
       // Wrong - penalty card added
       socket.emit('hand-updated', { myCards: room.gameState.hands[socket.id] });
@@ -599,6 +624,7 @@ function registerSocketHandlers(io, socket) {
           ? room.gameState.discardPile[room.gameState.discardPile.length - 1]
           : null,
       });
+      emitDebugState(io, room);
     }
   });
 
@@ -657,6 +683,7 @@ function registerSocketHandlers(io, socket) {
           ? room.gameState.discardPile[room.gameState.discardPile.length - 1]
           : null,
       });
+      emitDebugState(io, room);
     }
   });
 
@@ -710,6 +737,7 @@ function registerSocketHandlers(io, socket) {
         ? room.gameState.discardPile[room.gameState.discardPile.length - 1]
         : null,
     });
+    emitDebugState(io, room);
   });
 
   // --- END GAMEPLAY EVENTS ---

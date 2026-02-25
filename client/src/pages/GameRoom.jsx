@@ -9,6 +9,7 @@ import DiscardPile from '../components/DiscardPile';
 import Card from '../components/Card';
 import RulesModal from '../components/RulesModal';
 import Scratchpad from '../components/Scratchpad';
+import DebugPanel from '../components/DebugPanel';
 import SuggestionPanel from '../components/SuggestionPanel';
 import { getCustomBot, computeSuggestion } from '../utils/BotStrategies';
 import { useScratchpad } from '../hooks/useScratchpad';
@@ -934,6 +935,7 @@ export default function GameRoom() {
       </div>
 
       {showRules && <RulesModal onClose={() => setShowRules(false)} />}
+      {import.meta.env.VITE_DEBUG === 'true' && <DebugPanel />}
     </div>
   );
 }
